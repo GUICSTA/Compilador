@@ -5,6 +5,11 @@ import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
 
+/**
+ * [Arquivo: ErrorHandler.java]
+ * * Classe ErrorHandler atualizada com todas as modificações
+ * para personalizar as mensagens de erro sintático.
+ */
 public class ErrorHandler {
 
     // Trocado 'List' por 'Set' (LinkedHashSet) para sintetizar erros
@@ -13,8 +18,8 @@ public class ErrorHandler {
     // O Mapa de erros léxicos
     private static final java.util.Map<Integer, String> LEXICAL_ERROR_MESSAGES = new java.util.HashMap<>();
     static {
-        // (Vou omitir o preenchimento para economizar espaço, o seu está ótimo)
-        // LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_INICIA_COM_DIGITO, ...);
+        // (O preenchimento do seu mapa de erros léxicos original entra aqui)
+        // Ex: LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_INICIA_COM_DIGITO, ...);
     }
 
     /**
@@ -29,8 +34,9 @@ public class ErrorHandler {
         String encontrado = getErrorTokenDescription(errorToken);
         String esperado = getExpectedTokensDescription(e);
 
-        String finalMessage = String.format("Erro Sintático na linha %d, coluna %d. Encontrado %s, esperado: %s.",
-                line, column, encontrado, esperado);
+        // --- MODIFICAÇÃO 1: Adiciona o contexto na mensagem ---
+        String finalMessage = String.format("Erro Sintático na linha %d, coluna %d (%s): Encontrado %s, esperado: %s.",
+                line, column, context, encontrado, esperado);
 
         addError(finalMessage);
     }
@@ -75,6 +81,9 @@ public class ErrorHandler {
         return "\"" + t.image.replace("\n", "\\n").replace("\r", "\\r") + "\"";
     }
 
+    /**
+     * Método atualizado para incluir os GATILHOS de mensagens personalizadas.
+     */
     private String getExpectedTokensDescription(ParseException e) {
         if (e.expectedTokenSequences == null || e.expectedTokenSequences.length == 0) {
             return "uma expressão válida";
@@ -99,6 +108,54 @@ public class ErrorHandler {
             }
         }
 
+        // --- GATILHO 1 (Para tipos) ---
+        Set<String> tiposEsperados = new TreeSet<>();
+        tiposEsperados.add("'num'");
+        tiposEsperados.add("'real'");
+        tiposEsperados.add("'text'");
+        tiposEsperados.add("'flag'");
+
+        if (expected.equals(tiposEsperados)) {
+            return "tipo do identificador";
+        }
+
+        // --- GATILHO 2 (Para ';' ou inicialização) ---
+        Set<String> initEsperados = new TreeSet<>();
+        initEsperados.add("';'");
+        initEsperados.add("'='");
+        initEsperados.add("'['");
+
+        if (expected.equals(initEsperados)) {
+            return "';' ou inicialização de identificador";
+        }
+
+        // --- GATILHO 3 (Para 'set' faltando ';') ---
+        // (Baseado na lista de tokens da image_ee807b.png)
+        Set<String> setMissingSemicolon = new TreeSet<>();
+        setMissingSemicolon.add("'!='");
+        setMissingSemicolon.add("'%'");
+        setMissingSemicolon.add("'%%'");
+        setMissingSemicolon.add("'&'");
+        setMissingSemicolon.add("'*'");
+        setMissingSemicolon.add("'**'");
+        setMissingSemicolon.add("'+'");
+        setMissingSemicolon.add("','");
+        setMissingSemicolon.add("'-'");
+        setMissingSemicolon.add("'/'");
+        setMissingSemicolon.add("';'");
+        setMissingSemicolon.add("'<<'");
+        setMissingSemicolon.add("'<<='");
+        setMissingSemicolon.add("'='");
+        setMissingSemicolon.add("'=='");
+        setMissingSemicolon.add("'>>'");
+        setMissingSemicolon.add("'>>='");
+        setMissingSemicolon.add("'|'");
+
+        if (expected.equals(setMissingSemicolon)) {
+            return "';' , ')' ou expressão";
+        }
+
+        // --- Lógica Padrão (Fallback) ---
         if (expected.isEmpty()) {
             return "uma construção válida";
         }

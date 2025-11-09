@@ -174,7 +174,7 @@ void lista_de_declaracao_linha() :
     ( declaracao_de_variaveis() lista_de_declaracao_linha() | {} /* epsilon */ )
 }
 
-// --- REGRA COM RECUPERAÇÃO DE ERRO ---
+// --- REGRA COM RECUPERAÇÃO DE ERRO (E LIMPEZA CORRIGIDA) ---
 void declaracao_de_variaveis() :
 {}
 {
@@ -198,11 +198,7 @@ void declaracao_de_variaveis() :
                 }
             }
 
-            listaDeIdentificadoresDaLinha.clear();
-            listaBasesDaLinha.clear();
-            VP = 0;
-            houveInitLinha = false;
-            primeiroBaseInit = -1;
+            // O BLOCO DE LIMPEZA FOI REMOVIDO DAQUI
         }
     } catch (ParseException e) {
         // --- MODO PÂNICO ---
@@ -219,6 +215,16 @@ void declaracao_de_variaveis() :
             }
             getNextToken();
         }
+    } finally {
+        // --- BLOCO DE LIMPEZA MOVIDO PARA CÁ ---
+        // O "finally" garante que este código execute
+        // quer o "try" tenha sucesso ou o "catch" seja ativado.
+
+        listaDeIdentificadoresDaLinha.clear();
+        listaBasesDaLinha.clear();
+        VP = 0;
+        houveInitLinha = false;
+        primeiroBaseInit = -1;
     }
 }
 
@@ -562,6 +568,24 @@ void entrada() :
             getNextToken();
         }
     }
+}
+
+boolean indice_entrada(Simbolo simboloLHS) :
+{}
+{
+    (
+        <LBRACKET> expressao()
+        {
+            if(simboloLHS != null) {
+                geradorDeCodigo.gerar("LDI", String.valueOf(simboloLHS.getBase() - 1));
+                geradorDeCodigo.gerar("ADD", "0");
+            }
+        }
+        <RBRACKET>
+        { return true; }
+    |
+        {} { return false; } // epsilon
+    )
 }
 
 // SAÍDA

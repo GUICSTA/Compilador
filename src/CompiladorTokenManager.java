@@ -954,7 +954,6 @@ int jjmatchedKind;
 /** Get the next Token. */
 public Token getNextToken() 
 {
-  //int kind;
   Token specialToken = null;
   Token matchedToken;
   int curPos = 0;

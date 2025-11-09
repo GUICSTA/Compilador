@@ -119,4 +119,3 @@ public class Token {
   }
 
 }
-/* JavaCC - OriginalChecksum=ee01958e0d32664f1f0f71c9feb86fb2 (do not edit this line) */

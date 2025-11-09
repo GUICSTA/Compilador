@@ -22,7 +22,6 @@ public class TabelaDeSimbolos {
     }
 
     /**
-     * --- CORREÇÃO AQUI ---
      * A assinatura do método foi alterada para (String, int, int)
      * para corresponder ao que o Compilador.jj está chamando.
      */

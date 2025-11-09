@@ -512,7 +512,6 @@ public class CompilerInterface extends JFrame {
                                 t.kind <= CompiladorConstants.ERRO_ID_TERMINA_COM_DIGITO) ||
                                 t.kind == CompiladorConstants.ERRO_LEXICO)
                 ) {
-                    // --- CORREÇÃO AQUI ---
                     // Chama o método correto do ErrorHandler
                     errorHandler.processLexicalError(t, "");
                 }

@@ -14,7 +14,6 @@ public class GeradorDeCodigo {
     }
 
     /**
-     * --- CORREÇÃO AQUI ---
      * (Corrigido para retornar 'int' - o endereço da instrução gerada)
      */
     public int gerar(String operacao, String parametro) {

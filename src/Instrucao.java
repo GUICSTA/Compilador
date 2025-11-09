@@ -15,7 +15,6 @@ public class Instrucao {
         return String.format("(%d, %s, %s)", ponteiro, operacao, parametro);
     }
 
-    // --- Getters Adicionados ---
     public int getPonteiro() {
         return this.ponteiro;
     }

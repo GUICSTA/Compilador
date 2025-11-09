@@ -13,7 +13,6 @@ public class Simbolo {
         this.tamanho = tamanho;
     }
 
-    // --- MÉTODOS QUE ESTAVAM FALTANDO ---
     public String getLexema() {
         return lexema;
     }

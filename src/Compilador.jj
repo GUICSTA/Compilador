@@ -473,25 +473,6 @@ void atribuicao() :
                         int endereco = simboloLHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("STR", String.valueOf(endereco)); // Usa STR direto
                     } else {
-                        // --- ACESSO INDIRETO (Programa B) ---
-                        // O VALOR (99) está no topo da pilha.
-                        // A expressão do índice NÃO gerou código. Temos que gerar agora.
-                        // (Esta parte falta no seu .jj original)
-
-                        // Recriar a lógica de 'indice_atribuicao' aqui:
-                        // Gerar código para o índice (que já foi parseado)
-                        // A sua gramática não permite isso facilmente.
-
-                        // **** SOLUÇÃO MAIS SIMPLES ****
-                        // Reverta a `indice_atribuicao` para gerar código,
-                        // e adicione `SWP` (Swap) aqui.
-
-                        // Por favor, reverta as mudanças 1 e 2.
-                        // Mantenha apenas a mudança da variável 'indiceConstante'.
-                        // E use esta lógica em #A3:
-
-                        // (Após reverter 1 e 2, a Pilha está:
-                        // [ENDEREÇO (subtopo), VALOR (topo)]
 
                         geradorDeCodigo.gerar("SWP", "0"); // Inverte a pilha
                         geradorDeCodigo.gerar("STX", "0"); // Agora está correto

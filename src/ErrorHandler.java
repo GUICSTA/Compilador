@@ -13,8 +13,6 @@ public class ErrorHandler {
     // O Mapa de erros léxicos
     private static final java.util.Map<Integer, String> LEXICAL_ERROR_MESSAGES = new java.util.HashMap<>();
     static {
-        // (Vou omitir o preenchimento para economizar espaço, o seu está ótimo)
-        // LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_INICIA_COM_DIGITO, ...);
     }
 
     /**
@@ -91,7 +89,6 @@ public class ErrorHandler {
                         .replace("<CONST_LITERAL>", "um texto")
                         .replace("<EOF>", "o final do arquivo");
 
-                // Remove os < > de tokens como <OP_ARIT_SUM>
                 if (cleanImage.startsWith("<") && cleanImage.endsWith(">")) {
                     cleanImage = cleanImage.substring(1, cleanImage.length() - 1);
                 }

@@ -898,7 +898,6 @@ public class Compilador implements CompiladorConstants {
                 // Geração de Código
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
-                        // --- OTIMIZAÇÃO (Programa A) ---
                         // O índice foi constante. Calculamos o endereço final.
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloRHS.getBase() + (indice - 1);

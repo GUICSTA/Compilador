@@ -428,14 +428,11 @@ void comando() :
     )
 }
 
-// Em Compilador.jj, substitua a regra inteira por esta:
-
-// Em Compilador.jj, use esta regra para "atribuicao"
-
+// ATRIBUIÇÃO (CORRIGIDA)
 void atribuicao() :
 {
     Token t;
-    Simbolo simboloLHS = null; // Inicializa como nulo
+    Simbolo simboloLHS;
     boolean temIndiceLHS = false;
 }
 {
@@ -449,18 +446,16 @@ void atribuicao() :
             this.indiceConstante = null; // Reseta a memória
         }
 
-        // --- ORDEM DE PARSING ORIGINAL (CORRETA) ---
-        // 1. Verifica se há um índice [ ... ]
-        { temIndiceLHS = indice(simboloLHS); }
+        // 1. Resolve o índice PRIMEIRO
+        { temIndiceLHS = indice(simboloLHS); } // <-- MUDANÇA: Chamando a nova regra unificada
 
-        // 2. Procura o =
         <ASSIGN>
 
-        // 3. Procura a expressão (o valor)
-        expressao()
-        // --- FIM DA ORDEM ORIGINAL ---
+        // 2. Resolve o valor DEPOIS
+        expressao() // Gera o código do VALOR (ex: LDI, 99)
 
-        { // #A2 (Validação)
+        // #A2 (Validação)
+        {
             if (simboloLHS != null) {
                 if (simboloLHS.isVetor() && !temIndiceLHS) {
                     errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
@@ -469,21 +464,25 @@ void atribuicao() :
                 }
             }
         }
-        { // #A3 (Geração de Código)
+
+        // #A3 (Geração de Código)
+        {
             if (simboloLHS != null) {
                 if (temIndiceLHS) {
                     if (this.indiceConstante != null) {
-                        // Otimização (Programa A)
+                        // --- OTIMIZAÇÃO (Programa A) ---
+                        // Pilha: [VALOR]
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
-                        geradorDeCodigo.gerar("STR", String.valueOf(endereco));
+                        geradorDeCodigo.gerar("STR", String.valueOf(endereco)); // Usa STR direto
                     } else {
-                        // Acesso Indireto (Programa B)
-                        // A pilha é [ENDEREÇO, VALOR]
+                        // --- ACESSO INDIRETO (Programa B) ---
+                        // Pilha: [ENDERECO, VALOR] (Correto agora)
                         geradorDeCodigo.gerar("STX", "0");
                     }
                 } else {
-                    // Escalar
+                    // --- ESCALAR ---
+                    // Pilha: [VALOR]
                     geradorDeCodigo.gerar("STR", String.valueOf(simboloLHS.getBase()));
                 }
             }
@@ -493,11 +492,10 @@ void atribuicao() :
         if (errorHandler != null) {
              errorHandler.processParseException(e, "em comando 'set'");
         }
-        Token t_recuperacao; // Token para recuperação
         while (true) {
-            t_recuperacao = getToken(1);
-            if (t_recuperacao.kind == EOF || t_recuperacao.kind == SEMICOLON) {
-                 if (t_recuperacao.kind == SEMICOLON) getNextToken();
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == SEMICOLON) {
+                 if (t.kind == SEMICOLON) getNextToken();
                  break;
             }
             getNextToken();

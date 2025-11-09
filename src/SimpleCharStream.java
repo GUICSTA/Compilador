@@ -129,7 +129,6 @@ public class SimpleCharStream
      }
   }
 
-/** Start. */
   public char BeginToken() throws java.io.IOException
   {
      tokenBegin = -1;

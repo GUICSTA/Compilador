@@ -541,7 +541,6 @@ public class CompilerInterface extends JFrame {
             return;
         }
 
-        // --- FASE 2: ANÁLISE SINTÁTICA E SEMÂNTICA ---
         Compilador analisadorSintatico = new Compilador(new StringReader(codigoFonte), errorHandler);
         try {
             analisadorSintatico.programa();
@@ -550,7 +549,7 @@ public class CompilerInterface extends JFrame {
             // Chama o método 'processParseException' para traduzir a mensagem
             errorHandler.processParseException(e, "na estrutura principal do programa");
         } catch (Exception e) {
-            areaMensagens.setText("ERRO INESPERADO DURANTE A ANÁLISE SINTÁTICA:\n\n" + e.getMessage());
+            areaMensagens.setText("Erro inesperado durante a análise:\n\n" + e.getMessage());
             atualizarStatus("Erro na compilação");
             e.printStackTrace();
             return;
@@ -559,12 +558,12 @@ public class CompilerInterface extends JFrame {
         // --- RESULTADO FINAL ---
         if (errorHandler.hasErrors()) {
             StringBuilder saidaErros = new StringBuilder();
-            saidaErros.append("Foram encontrados erros na ANÁLISE SINTÁTICA/SEMÂNTICA:\n\n");
+            saidaErros.append("Foram encontrados erros na análise" +":\n\n");
             for (String erro : errorHandler.getErrorMessages()) {
                 saidaErros.append("- ").append(erro).append("\n");
             }
             areaMensagens.setText(saidaErros.toString());
-            atualizarStatus("Erro na compilação - Sintático/Semântico");
+            atualizarStatus("Erro na compilação");
         } else {
             // SUCESSO!
             areaMensagens.setText("Análise léxica e sintática concluída com sucesso!\n");

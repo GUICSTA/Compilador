@@ -1,0 +1,885 @@
+options {
+    STATIC = false;
+    IGNORE_CASE = true;
+}
+
+PARSER_BEGIN(Compilador)
+
+import java.io.*;
+import java.util.List;
+import java.util.ArrayList;
+import java.util.Stack;
+
+public class Compilador {
+
+    private ErrorHandler errorHandler;
+    private TabelaDeSimbolos tabelaDeSimbolos = new TabelaDeSimbolos();
+    private GeradorDeCodigo geradorDeCodigo = new GeradorDeCodigo();
+
+    private int VP;
+    private List<String> listaDeIdentificadoresDaLinha;
+    private List<Integer> listaBasesDaLinha;
+    private int categoriaAtual;
+    private Stack<Integer> pilhaDeDesvios = new Stack<Integer>();
+    private int baseDoUltimoVetor;
+    private int tamanhoDoUltimoVetor;
+    private boolean houveInitLinha;
+    private int primeiroBaseInit;
+    private int indiceCorrenteVetor;
+    private Token indiceConstante = null;
+
+    public Compilador(Reader stream, ErrorHandler handler) {
+        this(stream);
+        this.errorHandler = handler;
+        this.tabelaDeSimbolos.setErrorHandler(handler); // Conecta o ErrorHandler
+    }
+
+    public String getCodigoGerado() {
+        if (errorHandler.hasErrors()) {
+            return "--- ERROS ENCONTRADOS. CÓDIGO NÃO GERADO ---";
+        }
+        return geradorDeCodigo.getCodigoIntermediario();
+    }
+
+    public static void main(String args[]) throws TokenMgrError, FileNotFoundException, ParseException {
+        try {
+            if (args.length == 0) {
+                System.err.println("Uso: java Compilador <arquivo-fonte>");
+                return;
+            }
+            ErrorHandler consoleHandler = new ErrorHandler();
+            Reader reader = new InputStreamReader(new FileInputStream(args[0]));
+            Compilador parser = new Compilador(reader, consoleHandler);
+            System.out.println("=== Iniciando análise léxica e sintática ===");
+
+            parser.programa();
+
+            if (consoleHandler.hasErrors()) {
+                System.out.println("\n=== Erros encontrados: ===");
+                for (String error : consoleHandler.getErrorMessages()) {
+                    System.err.println("- " + error);
+                }
+            } else {
+                System.out.println("\n=== Análise concluída com sucesso ===");
+                System.out.println(parser.getCodigoGerado());
+            }
+        } catch (FileNotFoundException e) {
+            System.err.println("Arquivo não encontrado: " + e.getMessage());
+        } catch (TokenMgrError e) {
+            System.err.println("ERRO LÉXICO FATAL: " + e.getMessage());
+        }
+    }
+}
+
+PARSER_END(Compilador)
+
+// --- DEFINIÇÕES LÉXICAS ---
+// (Sem alterações)
+SKIP : { " " | "\t" | "\n" | "\r" }
+SPECIAL_TOKEN : {
+    < LINE_COMMENT: "//" (~["\n", "\r"])* > |
+    < BLOCK_COMMENT: "/*" (~["*"] | "*" ~["/"])* "*/" >
+}
+TOKEN : {
+    <BEGIN: "begin"> | <DEFINE: "define"> | <START: "start"> | <END: "end"> | <SET: "set"> |
+    <READ: "read"> | <SHOW: "show"> | <IF: "if"> | <THEN: "then"> | <ELSE: "else"> |
+    <LOOP: "loop"> | <WHILE: "while"> | <NUM: "num"> | <REAL: "real"> | <TEXT: "text"> |
+    <FLAG: "flag"> | <TRUE: "true"> | <FALSE: "false">
+}
+TOKEN : {
+    <CONST_REAL: <DIGITO>(<DIGITO>)?(<DIGITO>)?(<DIGITO>)? "." <DIGITO>(<DIGITO>)? >
+|   <CONST_INT: <DIGITO>(<DIGITO>)?(<DIGITO>)? >
+|   <CONST_LITERAL: "\"" (~["\"", "\n", "\r"])* "\"" | "'" (~["'", "\n", "\r"])* "'" >
+}
+TOKEN : {
+    <IDENTIFIER: (<LETRA> | "_") ((<LETRA> | <DIGITO> | "_")*)>
+|   <#LETRA: ["a"-"z", "A"-"Z"]>
+|   <#DIGITO: ["0"-"9"]>
+}
+TOKEN : {
+    < OP_REL_LTLT_EQ: "<<=" > | < OP_REL_GTGT_EQ: ">>=" > | < OP_REL_EQ: "==" > |
+    < OP_REL_NEQ: "!=" > |
+    < OP_REL_LTLT: "<<" > | < OP_REL_GTGT: ">>" > | < OP_ARIT_POW: "**" > |
+    < OP_ARIT_DIVINT: "%%" > |
+    < OP_ARIT_SUM: "+" > | < OP_ARIT_SUB: "-" > | < OP_ARIT_MUL: "*" > |
+    < OP_ARIT_DIV: "/" > |
+    < OP_ARIT_MOD: "%" > | < OP_LOGIC_AND: "&" > | < OP_LOGIC_OR: "|" > |
+    < OP_LOGIC_NOT: "!" > |
+    < ASSIGN: "=" > | < SEMICOLON: ";" > | < COMMA: "," > |
+    < LPAREN: "(" > | < RPAREN: ")" > |
+    < LBRACKET: "[" > | < RBRACKET: "]" > |
+    < LBRACE: "{" > | < RBRACE: "}" > | < COLON: ":" > | <DOT: "." >
+}
+TOKEN : {
+    <ERRO_REAL_FRACAO_LONGA: (<DIGITO>)+ "." <DIGITO><DIGITO><DIGITO>(<DIGITO>)* >
+|   <ERRO_REAL_INTEIRO_LONGO: <DIGITO><DIGITO><DIGITO><DIGITO><DIGITO>(<DIGITO>)* "." (<DIGITO>)+ >
+|   <ERRO_REAL_INCOMPLETO: (<DIGITO>)+ "." >
+|   <ERRO_INT_LONGO: <DIGITO><DIGITO><DIGITO><DIGITO>(<DIGITO>)* >
+}
+TOKEN : {
+    <ERRO_ID_INICIA_COM_DIGITO: (<DIGITO>)+ (<LETRA> | "_") ((<LETRA> | <DIGITO> | "_")*) >
+|   <ERRO_ID_DIGITOS_CONSECUTIVOS: (<LETRA> | "_")(<LETRA> | <DIGITO> | "_")* <DIGITO> <DIGITO> (<LETRA> | <DIGITO> | "_")* >
+|   <ERRO_ID_TERMINA_COM_DIGITO: (<LETRA> | "_") (<LETRA> | <DIGITO> | "_")* <DIGITO> >
+}
+TOKEN : { <ERRO_LEXICO: ~[] > }
+
+
+// --- PRODUÇÕES SINTÁTICAS (GLC ANOTADA + MODO PÂNICO) ---
+
+void programa() :
+{}
+{
+    <BEGIN> identificador_de_programa() declaracao() <START> lista_de_comandos()
+    { geradorDeCodigo.gerar("STP", "0"); }
+    <END> <DOT>
+}
+
+void identificador_de_programa() :
+{ Token t; }
+{
+    ( t = <IDENTIFIER>
+      { tabelaDeSimbolos.inserirPrograma(t.image); }
+    |
+      {} // epsilon
+    )
+}
+
+void declaracao() :
+{}
+{
+    (
+      <DEFINE>
+      {
+          listaDeIdentificadoresDaLinha = new ArrayList<String>();
+          listaBasesDaLinha = new ArrayList<Integer>();
+          VP = 0;
+          houveInitLinha = false;
+          primeiroBaseInit = -1;
+      }
+      lista_de_declaracao()
+    |
+      {} // epsilon
+    )
+}
+
+void lista_de_declaracao() :
+{}
+{
+    ( declaracao_de_variaveis() lista_de_declaracao_linha() )+ // Um ou mais
+}
+
+void lista_de_declaracao_linha() :
+{}
+{
+    ( declaracao_de_variaveis() lista_de_declaracao_linha() | {} /* epsilon */ )
+}
+
+// --- REGRA COM RECUPERAÇÃO DE ERRO ---
+void declaracao_de_variaveis() :
+{}
+{
+    try {
+        lista_de_identificadores() <COLON> tipo() decl_do_vetor() <SEMICOLON>
+        // #D6
+        {
+            String op;
+            if (categoriaAtual == 1) op = "ALI";
+            else if (categoriaAtual == 2) op = "ALR";
+            else if (categoriaAtual == 3) op = "ALS";
+            else op = "ALB";
+            if (VP > 0) {
+                geradorDeCodigo.gerar(op, String.valueOf(VP));
+            }
+
+            if (houveInitLinha) {
+                for (int k = 1; k < listaBasesDaLinha.size(); k++) {
+                    geradorDeCodigo.gerar("LDV", String.valueOf(primeiroBaseInit));
+                    geradorDeCodigo.gerar("STR", String.valueOf(listaBasesDaLinha.get(k)));
+                }
+            }
+
+            listaDeIdentificadoresDaLinha.clear();
+            listaBasesDaLinha.clear();
+            VP = 0;
+            houveInitLinha = false;
+            primeiroBaseInit = -1;
+        }
+    } catch (ParseException e) {
+        // --- MODO PÂNICO ---
+        if (errorHandler != null) {
+            errorHandler.processParseException(e, "em declaração de variáveis");
+        }
+        // Pula até um ';' ou o início de 'start'
+        Token t;
+        while (true) {
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == START || t.kind == SEMICOLON) {
+                if (t.kind == SEMICOLON) getNextToken(); // Consome o ';'
+                break;
+            }
+            getNextToken();
+        }
+    }
+}
+
+void lista_de_identificadores() :
+{ Token t; }
+{
+    t = <IDENTIFIER>
+    {
+        if (tabelaDeSimbolos.buscar(t.image) != null) {
+            errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' já declarado.");
+        } else {
+            listaDeIdentificadoresDaLinha.add(t.image);
+        }
+    }
+    lista_de_identificadores_linha()
+}
+
+void lista_de_identificadores_linha() :
+{ Token t; }
+{
+    (
+        <COMMA> t = <IDENTIFIER>
+        {
+            if (tabelaDeSimbolos.buscar(t.image) != null) {
+                errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' já declarado.");
+            } else {
+                listaDeIdentificadoresDaLinha.add(t.image);
+            }
+        }
+        lista_de_identificadores_linha()
+    |
+        {} // epsilon
+    )
+}
+
+void tipo() :
+{}
+{
+    ( <NUM> { categoriaAtual = 1; }
+    | <REAL> { categoriaAtual = 2; }
+    | <TEXT> { categoriaAtual = 3; }
+    | <FLAG> { categoriaAtual = 4; }
+    )
+}
+
+
+void decl_do_vetor() :
+{}
+{
+    (
+        // --- RAMO 1: VETOR ---
+        <LBRACKET> constante_inteira() <RBRACKET>
+        {
+            // #V2
+            int vtAtual = tabelaDeSimbolos.getVT();
+            baseDoUltimoVetor = -1;
+            for (String id : listaDeIdentificadoresDaLinha) {
+                Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, tamanhoDoUltimoVetor);
+                if (s != null) {
+                    listaBasesDaLinha.add(s.getBase());
+                    baseDoUltimoVetor = s.getBase();
+                }
+            }
+            VP = (tamanhoDoUltimoVetor * listaDeIdentificadoresDaLinha.size());
+        }
+        inic_vetor()
+    |
+        // --- RAMO 2: ESCALAR ---
+        ( <ASSIGN> valor() { houveInitLinha = true; } | {} /* epsilon */ )
+        {
+            // #E2
+            for (String id : listaDeIdentificadoresDaLinha) {
+                Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, -1);
+                if (s != null) {
+                    listaBasesDaLinha.add(s.getBase());
+                }
+            }
+            VP = listaDeIdentificadoresDaLinha.size();
+        }
+        {
+            if (houveInitLinha) {
+                // #IE
+                primeiroBaseInit = listaBasesDaLinha.get(0);
+                geradorDeCodigo.gerar("STR", String.valueOf(primeiroBaseInit));
+            }
+        }
+    )
+}
+
+
+void constante_inteira() :
+{ Token t; }
+{
+    t = <CONST_INT>
+    {
+        // #V1
+        int valor = Integer.parseInt(t.image);
+        if (valor <= 0) {
+            errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Tamanho do vetor deve ser maior que 0.");
+            tamanhoDoUltimoVetor = 1;
+        } else {
+            tamanhoDoUltimoVetor = valor;
+        }
+    }
+}
+
+
+void inic_vetor() :
+{ indiceCorrenteVetor = 0; }
+{
+    (
+        <ASSIGN> <LBRACE> lista_valores_vetor() <RBRACE>
+        // #IV
+        {
+            if (indiceCorrenteVetor == 1) {
+                int baseV = baseDoUltimoVetor;
+                geradorDeCodigo.gerar("STR", String.valueOf(baseV));
+                for (int j = 2; j <= tamanhoDoUltimoVetor; j++) {
+                    geradorDeCodigo.gerar("LDV", String.valueOf(baseV));
+                    geradorDeCodigo.gerar("STR", String.valueOf(baseV + (j-1)));
+                }
+            }
+        }
+    |
+        {} // epsilon
+    )
+}
+
+void lista_valores_vetor() :
+{}
+{
+    valor()
+    {
+        // #VAL
+        geradorDeCodigo.gerar("STR", String.valueOf(baseDoUltimoVetor + indiceCorrenteVetor));
+        indiceCorrenteVetor++;
+    }
+    lista_valores_vetor_linha()
+}
+
+void lista_valores_vetor_linha() :
+{}
+{
+    (
+        <COMMA> valor()
+        {
+            // #VAL
+            geradorDeCodigo.gerar("STR", String.valueOf(baseDoUltimoVetor + indiceCorrenteVetor));
+            indiceCorrenteVetor++;
+        }
+        lista_valores_vetor_linha()
+    |
+        {} // epsilon
+    )
+}
+
+void valor() :
+{ Token t; }
+{
+    ( t = <CONST_INT>   { geradorDeCodigo.gerar("LDI", t.image); }
+    | t = <CONST_REAL>  { geradorDeCodigo.gerar("LDR", t.image); }
+    | t = <CONST_LITERAL> { geradorDeCodigo.gerar("LDS", t.image); }
+    | t = <TRUE>        { geradorDeCodigo.gerar("LDB", "1"); }
+    | t = <FALSE>       { geradorDeCodigo.gerar("LDB", "0"); }
+    )
+}
+
+// --- COMANDOS ---
+
+void lista_de_comandos() :
+{}
+{
+    // ( ... )* significa "zero ou mais"
+    (
+        try {
+            comando()
+        } catch (ParseException e) {
+            // --- MODO PÂNICO (para comandos) ---
+            if (errorHandler != null) {
+                 errorHandler.processParseException(e, "em comando");
+            }
+            Token t;
+            while (true) {
+                t = getToken(1);
+                if (t.kind == EOF || t.kind == END ||
+                    t.kind == SET || t.kind == READ ||
+                    t.kind == SHOW || t.kind == IF || t.kind == LOOP)
+                {
+                    break; // Ponto seguro
+                }
+                getNextToken();
+            }
+        }
+    )* // Fim do loop
+}
+
+void comando() :
+{}
+{
+    // Cada comando é responsável por sua própria recuperação
+    (
+        atribuicao()
+    |   entrada()
+    |   saida()
+    |   selecao()
+    |   repeticao()
+    )
+}
+
+void atribuicao() :
+{
+    Token t;
+    Simbolo simboloLHS;
+    boolean temIndiceLHS = false;
+}
+{
+    try {
+        <SET> t = <IDENTIFIER>
+        // #A1
+        {
+            simboloLHS = tabelaDeSimbolos.buscar(t.image);
+            if (simboloLHS == null) {
+                errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
+            }
+            this.indiceConstante = null; // Reseta a memória
+        }
+
+        // Parseia o índice (e preenche 'this.indiceConstante')
+        { temIndiceLHS = indice_atribuicao(simboloLHS); }
+
+        <ASSIGN> expressao() // Gera o código do VALOR (ex: LDI, 42)
+
+        // #A2 (Validação)
+        {
+            if (simboloLHS != null) {
+                if (simboloLHS.isVetor() && !temIndiceLHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
+                } else if (!simboloLHS.isVetor() && temIndiceLHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloLHS.getLexema() + "' não pode ser indexado.");
+                }
+            }
+        }
+
+        // #A3 (Geração de Código)
+        {
+            if (simboloLHS != null) {
+                if (temIndiceLHS) {
+                    if (this.indiceConstante != null) {
+                        // --- OTIMIZAÇÃO (Programa A) ---
+                        // O VALOR (42) está no topo da pilha
+                        int indice = Integer.parseInt(this.indiceConstante.image);
+                        int endereco = simboloLHS.getBase() + (indice - 1);
+                        geradorDeCodigo.gerar("STR", String.valueOf(endereco)); // Usa STR direto
+                    } else {
+                        // --- ACESSO INDIRETO (Programa B) ---
+                        // O VALOR (99) está no topo da pilha.
+                        // A expressão do índice NÃO gerou código. Temos que gerar agora.
+                        // (Esta parte falta no seu .jj original)
+
+                        // Recriar a lógica de 'indice_atribuicao' aqui:
+                        // Gerar código para o índice (que já foi parseado)
+                        // A sua gramática não permite isso facilmente.
+
+                        // **** SOLUÇÃO MAIS SIMPLES ****
+                        // Reverta a `indice_atribuicao` para gerar código,
+                        // e adicione `SWP` (Swap) aqui.
+
+                        // Por favor, reverta as mudanças 1 e 2.
+                        // Mantenha apenas a mudança da variável 'indiceConstante'.
+                        // E use esta lógica em #A3:
+
+                        // (Após reverter 1 e 2, a Pilha está:
+                        // [ENDEREÇO (subtopo), VALOR (topo)]
+
+                        geradorDeCodigo.gerar("SWP", "0"); // Inverte a pilha
+                        geradorDeCodigo.gerar("STX", "0"); // Agora está correto
+                    }
+                } else {
+                    // --- ESCALAR ---
+                    geradorDeCodigo.gerar("STR", String.valueOf(simboloLHS.getBase()));
+                }
+            }
+        }
+        <SEMICOLON>
+    } catch (ParseException e) {
+        // ... (código de erro)
+    }
+}
+
+boolean indice_atribuicao(Simbolo simboloLHS) :
+{ Token tok = null; } // Variável local temporária
+{
+    (
+        <LBRACKET>
+        (
+            // Ramo 1: Otimização (é uma constante)
+            tok = <CONST_INT>
+            {
+                this.indiceConstante = tok; // Salva o token da constante
+            }
+        |
+            // Ramo 2: Variável (é uma expressão)
+            expressao() // <-- Apenas parseia a expressão (não gera código AINDA)
+            {
+                this.indiceConstante = null; // Marca como não-constante
+            }
+        )
+        <RBRACKET>
+        { return true; }
+    |
+        // Ramo 3: Epsilon (sem índice)
+        {} { this.indiceConstante = null; return false; }
+    )
+}
+
+// ENTRADA
+void entrada() :
+{
+    Token t;
+    Simbolo simboloLHS;
+    boolean temIndiceLHS = false;
+}
+{
+    try {
+        <READ> <LPAREN> t = <IDENTIFIER>
+        // #R1
+        {
+            simboloLHS = tabelaDeSimbolos.buscar(t.image);
+            if (simboloLHS == null) {
+                errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
+            }
+        }
+
+        { temIndiceLHS = indice_entrada(simboloLHS); }
+
+        // #R2
+        {
+            if (simboloLHS != null) {
+                if (simboloLHS.isVetor() && !temIndiceLHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
+                } else if (!simboloLHS.isVetor() && temIndiceLHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloLHS.getLexema() + "' não pode ser indexado.");
+                }
+
+                geradorDeCodigo.gerar("REA", String.valueOf(simboloLHS.getCategoria()));
+
+                if (temIndiceLHS) {
+                    geradorDeCodigo.gerar("STX", "0");
+                } else {
+                    geradorDeCodigo.gerar("STR", String.valueOf(simboloLHS.getBase()));
+                }
+            }
+        }
+        <RPAREN> <SEMICOLON>
+    } catch (ParseException e) {
+        if (errorHandler != null) {
+             errorHandler.processParseException(e, "em comando 'read'");
+        }
+        while (true) {
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == SEMICOLON) {
+                 if (t.kind == SEMICOLON) getNextToken();
+                 break;
+            }
+            getNextToken();
+        }
+    }
+}
+
+boolean indice_entrada(Simbolo simboloLHS) :
+{}
+{
+    (
+        <LBRACKET> expressao()
+        {
+            if(simboloLHS != null) {
+                geradorDeCodigo.gerar("LDI", String.valueOf(simboloLHS.getBase() - 1));
+                geradorDeCodigo.gerar("ADD", "0");
+            }
+        }
+        <RBRACKET>
+        { return true; }
+    |
+        {} { return false; } // epsilon
+    )
+}
+
+// SAÍDA
+void saida() :
+{}
+{
+    try {
+        <SHOW> <LPAREN> lista_de_saida() <RPAREN> <SEMICOLON>
+    } catch (ParseException e) {
+        if (errorHandler != null) {
+             errorHandler.processParseException(e, "em comando 'show'");
+        }
+        Token t;
+        while (true) {
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == SEMICOLON) {
+                 if (t.kind == SEMICOLON) getNextToken();
+                 break;
+            }
+            getNextToken();
+        }
+    }
+}
+
+void lista_de_saida() :
+{}
+{
+    item() ( <COMMA> item() )*
+}
+
+void item() :
+{}
+{
+    (
+        elemento() { geradorDeCodigo.gerar("WRT", "0"); }
+    )
+}
+
+// SELEÇÃO
+void selecao() :
+{ int desvioJMF, desvioJMP; }
+{
+    try {
+        <IF> expressao()
+        {
+            desvioJMF = geradorDeCodigo.gerar("JMF", "0");
+            pilhaDeDesvios.push(desvioJMF);
+        }
+        <THEN> lista_de_comandos()
+        senao()
+        {
+            int enderecoPendente = pilhaDeDesvios.pop();
+            geradorDeCodigo.corrigir(enderecoPendente, String.valueOf(geradorDeCodigo.getProximoPonteiro()));
+        }
+        <END> <SEMICOLON>
+    } catch (ParseException e) {
+        if (errorHandler != null) {
+             errorHandler.processParseException(e, "em comando 'if'");
+        }
+        // Recuperação: Pula até o ';'
+        Token t;
+        while (true) {
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == SEMICOLON) {
+                 if (t.kind == SEMICOLON) getNextToken();
+                 break;
+            }
+            getNextToken();
+        }
+    }
+}
+
+void senao() :
+{}
+{
+    (
+        <ELSE>
+        {
+            int desvioJMF = pilhaDeDesvios.pop();
+            int desvioJMP = geradorDeCodigo.gerar("JMP", "0");
+            geradorDeCodigo.corrigir(desvioJMF, String.valueOf(geradorDeCodigo.getProximoPonteiro()));
+            pilhaDeDesvios.push(desvioJMP);
+        }
+        lista_de_comandos()
+    |
+        {} // epsilon
+    )
+}
+
+// REPETIÇÃO
+void repeticao() :
+{ int inicioLoop, desvioJMF; }
+{
+    try {
+        <LOOP> <WHILE>
+        { inicioLoop = geradorDeCodigo.getProximoPonteiro(); }
+
+        expressao()
+
+        {
+            desvioJMF = geradorDeCodigo.gerar("JMF", "0");
+            pilhaDeDesvios.push(desvioJMF);
+        }
+
+        lista_de_comandos()
+
+        {
+            geradorDeCodigo.gerar("JMP", String.valueOf(inicioLoop));
+            int enderecoJMF = pilhaDeDesvios.pop();
+            geradorDeCodigo.corrigir(enderecoJMF, String.valueOf(geradorDeCodigo.getProximoPonteiro()));
+        }
+        <END> <SEMICOLON>
+    } catch (ParseException e) {
+        if (errorHandler != null) {
+             errorHandler.processParseException(e, "em comando 'loop'");
+        }
+        // Recuperação: Pula até o ';'
+        Token t;
+        while (true) {
+            t = getToken(1);
+            if (t.kind == EOF || t.kind == SEMICOLON) {
+                 if (t.kind == SEMICOLON) getNextToken();
+                 break;
+            }
+            getNextToken();
+        }
+    }
+}
+
+
+// --- EXPRESSÃO ---
+
+void expressao() : {} {
+    expressao_aritmetica_ou_logica() expressao_linha()
+}
+
+void expressao_linha() : {} {
+    ( <OP_REL_EQ> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("EQL", "0"); }
+    | <OP_REL_NEQ> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("DIF", "0"); }
+    | <OP_REL_LTLT> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("SMR", "0"); }
+    | <OP_REL_GTGT> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("BGR", "0"); }
+    | <OP_REL_LTLT_EQ> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("SME", "0"); }
+    | <OP_REL_GTGT_EQ> expressao_aritmetica_ou_logica() { geradorDeCodigo.gerar("BGE", "0"); }
+    | {} // epsilon
+    )
+}
+
+void expressao_aritmetica_ou_logica() : {} {
+    termo2() menor_prioridade()
+}
+
+void menor_prioridade() : {} {
+    ( <OP_ARIT_SUM> termo2() { geradorDeCodigo.gerar("ADD", "0"); } menor_prioridade()
+    | <OP_ARIT_SUB> termo2() { geradorDeCodigo.gerar("SUB", "0"); } menor_prioridade()
+    | <OP_LOGIC_OR> termo2() { geradorDeCodigo.gerar("OR", "0"); } menor_prioridade()
+    | {} // epsilon
+    )
+}
+
+void termo2() : {} {
+    termo1() media_prioridade()
+}
+
+void media_prioridade() : {} {
+    ( <OP_ARIT_MUL> termo1() { geradorDeCodigo.gerar("MUL", "0"); } media_prioridade()
+    | <OP_ARIT_DIV> termo1() { geradorDeCodigo.gerar("DIV", "0"); } media_prioridade()
+    | <OP_ARIT_MOD> termo1() { geradorDeCodigo.gerar("MOD", "0"); } media_prioridade()
+    | <OP_ARIT_DIVINT> termo1() { geradorDeCodigo.gerar("REM", "0"); } media_prioridade()
+    | <OP_LOGIC_AND> termo1() { geradorDeCodigo.gerar("AND", "0"); } media_prioridade()
+    | {} // epsilon
+    )
+}
+
+void termo1() : {} {
+    elemento() maior_prioridade()
+}
+
+void maior_prioridade() : {} {
+    ( <OP_ARIT_POW> elemento() { geradorDeCodigo.gerar("POW", "0"); } maior_prioridade()
+    | {} // epsilon
+    )
+}
+
+// --- SUBSTITUA A REGRA "elemento()" INTEIRA POR ISTO ---
+
+void elemento() :
+{
+    Token t;
+    Simbolo simboloRHS;
+    boolean temIndiceRHS = false;
+}
+{
+    (
+        // --- RAMO 1: IDENTIFICADOR (com a nova lógica) ---
+        t = <IDENTIFIER>
+        {
+            simboloRHS = tabelaDeSimbolos.buscar(t.image);
+            if (simboloRHS == null) {
+                errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
+            }
+            this.indiceConstante = null; // Reseta a memória
+        }
+
+        // Esta chamada irá preencher 'this.indiceConstante'
+        // e gerar código de índice, se for variável
+        { temIndiceRHS = indice_expressao(simboloRHS); }
+
+        { // #E2 (Geração de Código)
+            if (simboloRHS != null) {
+                // Validação Semântica
+                if (simboloRHS.isVetor() && !temIndiceRHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloRHS.getLexema() + "' deve ser indexado.");
+                } else if (!simboloRHS.isVetor() && temIndiceRHS) {
+                    errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloRHS.getLexema() + "' não pode ser indexado.");
+                }
+
+                // Geração de Código
+                if (temIndiceRHS) {
+                    if (this.indiceConstante != null) {
+                        // --- OTIMIZAÇÃO (Programa A) ---
+                        // O índice foi constante. Calculamos o endereço final.
+                        int indice = Integer.parseInt(this.indiceConstante.image);
+                        int endereco = simboloRHS.getBase() + (indice - 1);
+                        geradorDeCodigo.gerar("LDV", String.valueOf(endereco));
+                    } else {
+                        // --- ACESSO INDIRETO (Programa B) ---
+                        // O índice era uma expressão.
+                        // A regra 'indice_expressao' já gerou o código do ENDEREÇO.
+                        // A pilha está pronta para o LDX.
+                        geradorDeCodigo.gerar("LDX", "0");
+                    }
+                } else {
+                    // --- ESCALAR ---
+                    geradorDeCodigo.gerar("LDV", String.valueOf(simboloRHS.getBase()));
+                }
+            }
+        }
+    |
+        // --- RAMO 2: CONST_INT ---
+        t = <CONST_INT>   { geradorDeCodigo.gerar("LDI", t.image); }
+    |
+        // --- RAMO 3: CONST_REAL ---
+        t = <CONST_REAL>  { geradorDeCodigo.gerar("LDR", t.image); }
+    |
+        // --- RAMO 4: CONST_LITERAL ---
+        t = <CONST_LITERAL> { geradorDeCodigo.gerar("LDS", t.image); }
+    |
+        // --- RAMO 5: TRUE ---
+        t = <TRUE>        { geradorDeCodigo.gerar("LDB", "1"); }
+    |
+        // --- RAMO 6: FALSE ---
+        t = <FALSE>       { geradorDeCodigo.gerar("LDB", "0"); }
+    |
+        // --- RAMO 7: ( expressao ) ---
+        <LPAREN> expressao() <RPAREN>
+    |
+        // --- RAMO 8: ! ( expressao ) ---
+        <OP_LOGIC_NOT> <LPAREN> expressao() <RPAREN>
+        { geradorDeCodigo.gerar("NOT", "0"); }
+    )
+}
+
+boolean indice_expressao(Simbolo simboloRHS) :
+{}
+{
+    (
+        <LBRACKET> expressao()
+        {
+            if(simboloRHS != null) {
+                geradorDeCodigo.gerar("LDI", String.valueOf(simboloRHS.getBase() - 1));
+                geradorDeCodigo.gerar("ADD", "0");
+            }
+        }
+        <RBRACKET>
+        { return true; }
+    |
+        {} { return false; } // epsilon
+    )
+}

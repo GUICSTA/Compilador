@@ -1,0 +1,13 @@
+begin
+
+
+ loop while a > b 
+    if a == 8 then
+      show ("certo");
+    else
+	SHOW ("errado");
+    end;
+    set x = x * 2;
+  end;
+  
+end.

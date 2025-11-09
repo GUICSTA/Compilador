@@ -1,0 +1,43 @@
+begin TesteRecuperacaoMultipla
+
+define
+    // Erro Léxico 1: Identificador inválido (termina com dígito)
+    var1_ : num;
+    var : text;
+    var : flag;
+    var : num; // Erro Léxico 2: Identificador inválido (começa com dígito)
+
+    // Erro Sintático 1: Falta ':'
+    var num; 
+    
+    // Erro Sintático 2: Falta ';' (caso especial antes de 'start')
+    var : real 
+start
+
+    // Erro Sintático 3: Comando mal iniciado (Falta 'set')
+    // Deve ser pego pelo 'try-catch' em 'comandos()'
+    var1_ = 10; 
+
+    // Comando correto (deve ser analisado após a recuperação do Erro 3)
+    read(var);
+
+    // Erro Sintático 4: Erro DENTRO do 'if' (Falta 'then')
+    // Deve ser pego pelo 'try-catch' em 'comando_selecao()'
+    if var1_ >> 5 
+        show("Dentro do IF com erro");
+    end;
+
+    // Comando correto (deve ser analisado após a recuperação do Erro 4)
+    show("Recuperado do IF");
+
+    // Erro Sintático 5: Erro DENTRO do 'loop' (Falta 'end;')
+    // Deve ser pego pelo 'try-catch' em 'comando_repeticao()'
+    loop while var == true
+        set var = false;
+        
+        // Erro Sintático 6: Comando 'read' faltando ')'
+        // Deve ser pego pelo 'try-catch' em 'comando_entrada()'
+        read(var1_; 
+
+    // O 'end.' abaixo pertence ao 'programa'. O 'end;' do 'loop' está faltando.
+end.

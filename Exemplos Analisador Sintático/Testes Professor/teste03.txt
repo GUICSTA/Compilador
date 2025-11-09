@@ -1,0 +1,16 @@
+beGIN
+define
+  a, b, c : num;
+	x, y : num = 50;
+	vetA, vetB, vetC : text[10];
+	vetX : real[3] = 4.5;
+
+define
+	erro : num;
+start
+
+  set x = "oi";
+	set contador = contador + 1;
+	set aux[1+z] = 200 * i;
+
+

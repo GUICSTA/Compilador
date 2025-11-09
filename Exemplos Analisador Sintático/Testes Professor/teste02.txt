@@ -1,0 +1,11 @@
+
+
+begin
+define
+
+
+
+start
+	set x[3+y-z] = 100;
+end.
+

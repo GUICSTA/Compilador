@@ -1,0 +1,26 @@
+begin
+
+  if 5+a*b | ( 6 / 4) then
+   
+  else
+    show ( a, b[4] );
+    8 > x ;
+  end;
+
+ if A
+  else show( x, y).
+ end;
+
+ if A>9 then
+  SHOW ( x );
+
+ 
+ if A<>B then
+   SHOW( (x) ). 
+   
+ else
+ SHOW (Y)
+ end;
+
+
+end.

@@ -1,0 +1,8 @@
+begin
+define
+    x, y : num = 10;
+    v : num [3] = 5;
+    z : text;
+start
+    // (comandos virão aqui depois)
+end.

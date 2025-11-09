@@ -1,0 +1,8 @@
+begin P 
+define 
+v : num [5]; 
+x : num; 
+start 
+set v[3] = 42; 
+show ( v[3] ); 
+end . 

@@ -1,0 +1,43 @@
+begin TesteSemantico
+define
+    // Teste 1: Escalares com inicialização comum (Regras #IE, #D6)
+    x, y : num = 10;
+    
+    // Teste 2: Escalar sem inicialização (Regra #E2)
+    z : num;
+    
+    // Teste 3: Vetor com inicialização única (Regras #V1, #V2, #IV)
+    vet_a : real[3] = {1.5};
+    
+    // Teste 4: Vetor com inicialização completa (Regras #V1, #V2, #IV, #VAL)
+    vet_b : text[2] = {"a", "b"};
+    
+    // Teste 5: Outros tipos e inicialização
+    pronto : flag = true;
+
+start
+    // Teste 6: Comando 'read' escalar (Regras #R1, #R2)
+    read(z);
+
+    // Teste 7: Comando 'set' escalar com expressão (Regras #A1, #A3, #ADD)
+    set x = z + 1;
+
+    // Teste 8: Comando 'if/else' (Regras #F1, #F2, #F3, #R>)
+    if x >> 10 then
+        show("maior"); // Regra #K3
+    else
+        show("menor"); // Regra #K3
+    end;
+
+    // Teste 9: 'set' em vetor (acesso indireto) (Regras #A1, #I1, #A3)
+    set vet_a[1] = 9.9;
+    
+    // Teste 10: 'show' de vetor (acesso indireto) (Regras #S2, #I1, #S3)
+    show(vet_a[1]);
+
+    // Teste 11: Comando 'loop' (Regras #L1, #L2, #R==)
+    loop while pronto == true
+        set pronto = false; // Regra #C5
+    end;
+
+end.

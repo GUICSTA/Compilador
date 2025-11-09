@@ -1,0 +1,20 @@
+begin TesteVetor
+define
+    v: num[5];  // Tabela de Símbolos: base 1, tam 5
+    i: num;     // Tabela de Símbolos: base 6, tam -
+start
+    // Teste 1: Atribui um valor ao índice
+    set i = 2; 
+
+    // Teste 2: Atribui 99 a v[i+1] (ou seja, v[3])
+    // Deve gerar STX
+    set v[i+1] = 99; 
+
+    // Teste 3: Mostra v[2] (não foi inicializado, deve ser 0)
+    // Deve gerar LDX
+    show(v[i]);
+
+    // Teste 4: Mostra v[3] (deve ser 99)
+    // Deve gerar LDX
+    show(v[i+1]);
+end.

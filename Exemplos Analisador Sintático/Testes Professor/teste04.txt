@@ -1,0 +1,18 @@
+
+
+begin programa4_ 
+start
+
+  read ( ).
+  read (a, b  c).
+  read ( show/ ).
+  read( vet[60 - x] ).
+  
+
+  show( a 'abcd' 888  b ).
+  		
+  show ( )
+  show (start).
+  show(5 + 5).
+
+end.

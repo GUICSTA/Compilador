@@ -1,0 +1,9 @@
+begin P 
+define 
+v : num [6]; 
+i : num; 
+start 
+set i = 2; 
+set v[i + 1] = 99; 
+show ( v[i] ); 
+end . 

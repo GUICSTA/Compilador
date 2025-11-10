@@ -4,6 +4,8 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.Map;
+import java.util.HashMap;
 
 /**
  * [Arquivo: ErrorHandler.java]
@@ -18,8 +20,15 @@ public class ErrorHandler {
     // O Mapa de erros léxicos
     private static final java.util.Map<Integer, String> LEXICAL_ERROR_MESSAGES = new java.util.HashMap<>();
     static {
-        // (O preenchimento do seu mapa de erros léxicos original entra aqui)
-        // Ex: LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_INICIA_COM_DIGITO, ...);
+        // --- BLOCO PREENCHIDO ---
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_INICIA_COM_DIGITO, "Identificador inválido: não pode começar com um dígito.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_DIGITOS_CONSECUTIVOS, "Identificador inválido: não pode conter dois ou mais dígitos consecutivos.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_ID_TERMINA_COM_DIGITO, "Identificador inválido: não pode terminar com um dígito.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_INT_LONGO, "Constante numérica inteira muito longa.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_FRACAO_LONGA, "Constante real com parte fracionária muito longa.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_INTEIRO_LONGO, "Constante real com parte inteira muito longa.");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_INCOMPLETO, "Constante real malformada (faltam dígitos após o ponto).");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_LEXICO, "Símbolo não reconhecido pela linguagem.");
     }
 
     /**
@@ -35,8 +44,15 @@ public class ErrorHandler {
         String esperado = getExpectedTokensDescription(e);
 
         // --- MODIFICAÇÃO 1: Adiciona o contexto na mensagem ---
-        String finalMessage = String.format("Erro Sintático na linha %d, coluna %d (%s): Encontrado %s, esperado: %s.",
-                line, column, context, encontrado, esperado);
+        // Se a mensagem customizada já tem "esperado:", não adiciona de novo.
+        String finalMessage;
+        if (esperado.startsWith("esperado:")) {
+            finalMessage = String.format("Erro Sintático na linha %d, coluna %d (%s): Encontrado %s, %s.",
+                    line, column, context, encontrado, esperado);
+        } else {
+            finalMessage = String.format("Erro Sintático na linha %d, coluna %d (%s): Encontrado %s, esperado: %s.",
+                    line, column, context, encontrado, esperado);
+        }
 
         addError(finalMessage);
     }
@@ -53,11 +69,11 @@ public class ErrorHandler {
 
         if (LEXICAL_ERROR_MESSAGES.containsKey(t.kind)) {
             String specific = LEXICAL_ERROR_MESSAGES.get(t.kind);
-            message = String.format("Erro Léxico na linha %d, coluna %d: %s",
-                    line, column, specific);
+            message = String.format("Erro Léxico na linha %d, coluna %d %s: %s",
+                    line, column, context, specific);
         } else {
-            message = String.format("Erro Léxico na linha %d, coluna %d: Símbolo não reconhecido '%s'.",
-                    line, column, t.image);
+            message = String.format("Erro Léxico na linha %d, coluna %d %s: Símbolo não reconhecido pela linguagem.",
+                    line, column, context);
         }
 
         addError(message);
@@ -78,7 +94,7 @@ public class ErrorHandler {
         if (t.kind == CompiladorConstants.EOF) {
             return "o final do arquivo";
         }
-        return "\"" + t.image.replace("\n", "\\n").replace("\r", "\\r") + "\"";
+        return "'" + t.image.replace("\n", "\\n").replace("\r", "\\r") + "'";
     }
 
     /**
@@ -129,30 +145,49 @@ public class ErrorHandler {
             return "';' ou inicialização de identificador";
         }
 
-        // --- GATILHO 3 (Para 'set' faltando ';') ---
-        // (Baseado na lista de tokens da image_ee807b.png)
-        Set<String> setMissingSemicolon = new TreeSet<>();
-        setMissingSemicolon.add("'!='");
-        setMissingSemicolon.add("'%'");
-        setMissingSemicolon.add("'%%'");
-        setMissingSemicolon.add("'&'");
-        setMissingSemicolon.add("'*'");
-        setMissingSemicolon.add("'**'");
-        setMissingSemicolon.add("'+'");
-        setMissingSemicolon.add("','");
-        setMissingSemicolon.add("'-'");
-        setMissingSemicolon.add("'/'");
-        setMissingSemicolon.add("';'");
-        setMissingSemicolon.add("'<<'");
-        setMissingSemicolon.add("'<<='");
-        setMissingSemicolon.add("'='");
-        setMissingSemicolon.add("'=='");
-        setMissingSemicolon.add("'>>'");
-        setMissingSemicolon.add("'>>='");
-        setMissingSemicolon.add("'|'");
+        // --- GATILHO 5 (NOVO - para 'start' faltando 'end') ---
+        // Este gatilho é para o erro da linha 49
+        Set<String> startMissingEnd = new TreeSet<>();
+        startMissingEnd.add("'end'");
+        startMissingEnd.add("'if'");
+        startMissingEnd.add("'loop'");
+        startMissingEnd.add("'read'");
+        startMissingEnd.add("'set'");
+        startMissingEnd.add("'show'");
 
-        if (expected.equals(setMissingSemicolon)) {
-            return "';' , ')' ou expressão";
+        if (expected.equals(startMissingEnd)) {
+            return "esperado 'end;' ou comando"; // <-- Sua nova mensagem
+        }
+
+        // --- LÓGICA DOS GATILHOS 3 E 4 ---
+
+        // Checa por operadores de expressão (comum aos dois gatilhos)
+        boolean temOperador = expected.contains("'+'") || expected.contains("'-'") ||
+                expected.contains("'*'") || expected.contains("'=='") ||
+                expected.contains("'&'") || expected.contains("'|'") ||
+                expected.contains("'!='") || expected.contains("'<<'");
+
+        // --- GATILHO 'IF' (para linha 42) ---
+        // Se espera 'then' E operadores, é um 'if' faltando 'then'
+        boolean temThen = expected.contains("'then'");
+        if (temThen && temOperador) {
+            return "esperado: then ou expressão"; // <-- Sua mensagem da linha 42
+        }
+
+        // --- GATILHO 'SET' (para linha 37) ---
+        // Se espera ';' E operadores, é um 'set' faltando ';'
+        boolean temSemicolon = expected.contains("';'");
+        if (temSemicolon && temOperador) {
+            return "esperado: ';' ou expressão"; // <-- Sua mensagem da linha 37
+        }
+
+        // --- GATILHO (extra, para linha 38) ---
+        Set<String> readMissingParen = new TreeSet<>();
+        readMissingParen.add("')'");
+        readMissingParen.add("'['"); // Esperado ')' ou '['
+
+        if (expected.equals(readMissingParen)) {
+            return "esperado: ')' ou indíce do vetor";
         }
 
         // --- Lógica Padrão (Fallback) ---

@@ -7,12 +7,6 @@ import java.util.TreeSet;
 import java.util.Map;
 import java.util.HashMap;
 
-/**
- * [Arquivo: ErrorHandler.java]
- * Classe ErrorHandler atualizada com:
- * 1. Mensagens personalizadas (Gatilhos)
- * 2. Lógica de prioridade de exibição de erros (Léxico > Sintático > Semântico)
- */
 public class ErrorHandler {
 
     private Set<String> lexicalErrors = new LinkedHashSet<>();
@@ -32,10 +26,6 @@ public class ErrorHandler {
         LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_LEXICO, "Símbolo não reconhecido pela linguagem.");
     }
 
-    /**
-     * Processa uma ParseException (ERRO SINTÁTICO).
-     * (Lógica de mensagens customizadas mantida)
-     */
     public void processParseException(ParseException e, String context) {
         Token errorToken = (e.currentToken.next != null) ? e.currentToken.next : e.currentToken;
         int line = errorToken.beginLine;
@@ -56,14 +46,6 @@ public class ErrorHandler {
         syntacticErrors.add(finalMessage);
     }
 
-    /**
-     * Processa um erro léxico direto (chamado pelo Passo 1 da compilação).
-     * (Lógica de mensagens customizadas mantida)
-     */
-    /**
-     * Processa um erro léxico direto (chamado pelo Passo 1 da compilação).
-     * (Lógica de mensagens customizadas mantida)
-     */
     public void processLexicalError(Token t, String context) {
         if (t == null) return;
 
@@ -96,9 +78,6 @@ public class ErrorHandler {
         lexicalErrors.add(finalMessage);
     }
 
-    /**
-     * Adiciona um erro semântico (chamado pelo .jj)
-     */
     public void addError(String tipo, int linha, int col, String message) {
         if ("Semântico".equals(tipo)) {
             semanticErrors.add(String.format(
@@ -116,10 +95,7 @@ public class ErrorHandler {
         return "'" + t.image.replace("\n", "\\n").replace("\r", "\\r") + "'";
     }
 
-    /**
-     * Método atualizado para incluir os GATILHOS de mensagens personalizadas.
-     * (Totalmente preservado do seu arquivo)
-     */
+
     private String getExpectedTokensDescription(ParseException e) {
         if (e.expectedTokenSequences == null || e.expectedTokenSequences.length == 0) {
             return "uma expressão válida";

@@ -72,10 +72,6 @@ public class Compilador {
         }
     }
 
-    /**
-     * Converte o código da categoria (int) em um nome (String)
-     * para as mensagens de erro.
-     */
     private String getTipoPorCategoria(int categoria) {
         switch (categoria) {
             case 1: return "num";
@@ -107,11 +103,6 @@ TOKEN : {
 |   <CONST_LITERAL: "\"" (~["\"", "\n", "\r"])* "\"" | "'" (~["'", "\n", "\r"])* "'" >
 }
 TOKEN : {
-    <IDENTIFIER: (<LETRA> | "_") ((<LETRA> | <DIGITO> | "_")*)>
-|   <#LETRA: ["a"-"z", "A"-"Z"]>
-|   <#DIGITO: ["0"-"9"]>
-}
-TOKEN : {
     < OP_REL_LTLT_EQ: "<<=" > | < OP_REL_GTGT_EQ: ">>=" > | < OP_REL_EQ: "==" > |
     < OP_REL_NEQ: "!=" > |
     < OP_REL_LTLT: "<<" > | < OP_REL_GTGT: ">>" > | < OP_ARIT_POW: "**" > |
@@ -131,11 +122,20 @@ TOKEN : {
 |   <ERRO_REAL_INCOMPLETO: (<DIGITO>)+ "." >
 |   <ERRO_INT_LONGO: <DIGITO><DIGITO><DIGITO><DIGITO>(<DIGITO>)* >
 }
+
 TOKEN : {
     <ERRO_ID_INICIA_COM_DIGITO: (<DIGITO>)+ (<LETRA> | "_") ((<LETRA> | <DIGITO> | "_")*) >
 |   <ERRO_ID_DIGITOS_CONSECUTIVOS: (<LETRA> | "_")(<LETRA> | <DIGITO> | "_")* <DIGITO> <DIGITO> (<LETRA> | <DIGITO> | "_")* >
 |   <ERRO_ID_TERMINA_COM_DIGITO: (<LETRA> | "_") (<LETRA> | <DIGITO> | "_")* <DIGITO> >
 }
+
+TOKEN : {
+    <IDENTIFIER: (<LETRA> | "_") ((<LETRA> | <DIGITO> | "_")*)>
+|   <#LETRA: ["a"-"z", "A"-"Z"]>
+|   <#DIGITO: ["0"-"9"]>
+}
+
+// Erro léxico genérico
 TOKEN : { <ERRO_LEXICO: ~[] > }
 
 
@@ -217,7 +217,6 @@ void declaracao_de_variaveis() :
         if (errorHandler != null) {
             errorHandler.processParseException(e, "em declaração de variáveis");
         }
-        // Pula até um ';' ou o início de 'start'
         Token t;
         while (true) {
             t = getToken(1);
@@ -409,7 +408,6 @@ void lista_de_comandos() :
         try {
             comando()
         } catch (ParseException e) {
-            // --- MODO PÂNICO (para comandos) ---
             if (errorHandler != null) {
                  errorHandler.processParseException(e, "em comando");
             }
@@ -420,7 +418,7 @@ void lista_de_comandos() :
                     t.kind == SET || t.kind == READ ||
                     t.kind == SHOW || t.kind == IF || t.kind == LOOP)
                 {
-                    break; // Ponto seguro
+                    break;
                 }
                 getNextToken();
             }
@@ -784,7 +782,7 @@ void maior_prioridade() : {} {
     )
 }
 
-// --- elemento() ---
+// --- elemento ---
 void elemento() :
 {
     Token t;
@@ -793,13 +791,13 @@ void elemento() :
 }
 {
     (
-        // --- IDENTIFICADOR ---
+        // ---  IDENTIFICADOR ---
         t = <IDENTIFIER>
         {
             simboloRHS = tabelaDeSimbolos.buscar(t.image);
             if (simboloRHS == null) {
                 errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
-                this.tipoDaExpressaoAtual = -1;
+                this.tipoDaExpressaoAtual = -1; // -1 = tipo desconhecido/erro
             } else {
                 this.tipoDaExpressaoAtual = simboloRHS.getCategoria(); // Armazena o tipo da variável
             }
@@ -820,17 +818,13 @@ void elemento() :
 
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
-                        // O índice foi constante. Calculamos o endereço final.
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloRHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("LDV", String.valueOf(endereco));
                     } else {
-                        // A regra 'indice' gerou o código do ENDEREÇO.
-                        // A pilha está pronta para o LDX.
                         geradorDeCodigo.gerar("LDX", "0");
                     }
                 } else {
-                    // --- ESCALAR ---
                     geradorDeCodigo.gerar("LDV", String.valueOf(simboloRHS.getBase()));
                 }
             }
@@ -843,41 +837,41 @@ void elemento() :
             geradorDeCodigo.gerar("LDI", t.image);
         }
     |
-        // ---  CONST_REAL ---
+        // --- CONST_REAL ---
         t = <CONST_REAL>
         {
             this.tipoDaExpressaoAtual = 2; // 2 = real
             geradorDeCodigo.gerar("LDR", t.image);
         }
     |
-        // --- RAMO 4: CONST_LITERAL ---
+        // --- CONST_LITERAL ---
         t = <CONST_LITERAL>
         {
             this.tipoDaExpressaoAtual = 3; // 3 = text
             geradorDeCodigo.gerar("LDS", t.image);
         }
     |
-        // --- TRUE ---
+        // ---  TRUE ---
         t = <TRUE>
         {
             this.tipoDaExpressaoAtual = 4; // 4 = flag
             geradorDeCodigo.gerar("LDB", "1");
         }
     |
-        // --- RAMO 6: FALSE ---
+        // ---  FALSE ---
         t = <FALSE>
         {
             this.tipoDaExpressaoAtual = 4; // 4 = flag
             geradorDeCodigo.gerar("LDB", "0");
         }
     |
-        // --- ( expressao ) ---
+        // ---  ( expressao ) ---
         <LPAREN> expressao() <RPAREN>
     |
-        // ---  ! ( expressao ) ---
+        // --- ! ( expressao ) ---
         <OP_LOGIC_NOT> <LPAREN> expressao() <RPAREN>
         {
-            this.tipoDaExpressaoAtual = 4;
+            this.tipoDaExpressaoAtual = 4; // O resultado de '!' é sempre 'flag'
             geradorDeCodigo.gerar("NOT", "0");
         }
     )
@@ -894,24 +888,21 @@ boolean indice(Simbolo simbolo) :
                 this.indiceConstante = tok; // Salva o token, NÃO gera código
             }
         |
+            //Variável
             expressao() // Gera o código para o VALOR DO ÍNDICE
             {
-                this.indiceConstante = null; // Marca como não-constante
+                this.indiceConstante = null;
 
-                // Agora, gera o código para calcular o ENDEREÇO FINAL
                 if(simbolo != null) {
-                    // Pilha: [VALOR_INDICE]
                     geradorDeCodigo.gerar("LDI", String.valueOf(simbolo.getBase() - 1));
-                    // Pilha: [VALOR_INDICE, BASE-1]
                     geradorDeCodigo.gerar("ADD", "0");
-                    // Pilha: [ENDERECO_FINAL]
                 }
             }
         )
         <RBRACKET>
         { return true; }
     |
-        // Epsilon
+        //Epsilon
         {} { this.indiceConstante = null; return false; }
     )
 }

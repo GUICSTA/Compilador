@@ -53,83 +53,85 @@ public interface CompiladorConstants {
   /** RegularExpression Id. */
   int CONST_INT = 26;
   /** RegularExpression Id. */
-  int CONST_LITERAL = 27;
+  int ERRO_LITERAL = 27;
   /** RegularExpression Id. */
-  int IDENTIFIER = 28;
+  int CONST_LITERAL = 28;
   /** RegularExpression Id. */
-  int LETRA = 29;
+  int OP_REL_LTLT_EQ = 29;
   /** RegularExpression Id. */
-  int DIGITO = 30;
+  int OP_REL_GTGT_EQ = 30;
   /** RegularExpression Id. */
-  int OP_REL_LTLT_EQ = 31;
+  int OP_REL_EQ = 31;
   /** RegularExpression Id. */
-  int OP_REL_GTGT_EQ = 32;
+  int OP_REL_NEQ = 32;
   /** RegularExpression Id. */
-  int OP_REL_EQ = 33;
+  int OP_REL_LTLT = 33;
   /** RegularExpression Id. */
-  int OP_REL_NEQ = 34;
+  int OP_REL_GTGT = 34;
   /** RegularExpression Id. */
-  int OP_REL_LTLT = 35;
+  int OP_ARIT_POW = 35;
   /** RegularExpression Id. */
-  int OP_REL_GTGT = 36;
+  int OP_ARIT_DIVINT = 36;
   /** RegularExpression Id. */
-  int OP_ARIT_POW = 37;
+  int OP_ARIT_SUM = 37;
   /** RegularExpression Id. */
-  int OP_ARIT_DIVINT = 38;
+  int OP_ARIT_SUB = 38;
   /** RegularExpression Id. */
-  int OP_ARIT_SUM = 39;
+  int OP_ARIT_MUL = 39;
   /** RegularExpression Id. */
-  int OP_ARIT_SUB = 40;
+  int OP_ARIT_DIV = 40;
   /** RegularExpression Id. */
-  int OP_ARIT_MUL = 41;
+  int OP_ARIT_MOD = 41;
   /** RegularExpression Id. */
-  int OP_ARIT_DIV = 42;
+  int OP_LOGIC_AND = 42;
   /** RegularExpression Id. */
-  int OP_ARIT_MOD = 43;
+  int OP_LOGIC_OR = 43;
   /** RegularExpression Id. */
-  int OP_LOGIC_AND = 44;
+  int OP_LOGIC_NOT = 44;
   /** RegularExpression Id. */
-  int OP_LOGIC_OR = 45;
+  int ASSIGN = 45;
   /** RegularExpression Id. */
-  int OP_LOGIC_NOT = 46;
+  int SEMICOLON = 46;
   /** RegularExpression Id. */
-  int ASSIGN = 47;
+  int COMMA = 47;
   /** RegularExpression Id. */
-  int SEMICOLON = 48;
+  int LPAREN = 48;
   /** RegularExpression Id. */
-  int COMMA = 49;
+  int RPAREN = 49;
   /** RegularExpression Id. */
-  int LPAREN = 50;
+  int LBRACKET = 50;
   /** RegularExpression Id. */
-  int RPAREN = 51;
+  int RBRACKET = 51;
   /** RegularExpression Id. */
-  int LBRACKET = 52;
+  int LBRACE = 52;
   /** RegularExpression Id. */
-  int RBRACKET = 53;
+  int RBRACE = 53;
   /** RegularExpression Id. */
-  int LBRACE = 54;
+  int COLON = 54;
   /** RegularExpression Id. */
-  int RBRACE = 55;
+  int DOT = 55;
   /** RegularExpression Id. */
-  int COLON = 56;
+  int ERRO_REAL_FRACAO_LONGA = 56;
   /** RegularExpression Id. */
-  int DOT = 57;
+  int ERRO_REAL_INTEIRO_LONGO = 57;
   /** RegularExpression Id. */
-  int ERRO_REAL_FRACAO_LONGA = 58;
+  int ERRO_REAL_INCOMPLETO = 58;
   /** RegularExpression Id. */
-  int ERRO_REAL_INTEIRO_LONGO = 59;
+  int ERRO_INT_LONGO = 59;
   /** RegularExpression Id. */
-  int ERRO_REAL_INCOMPLETO = 60;
+  int ERRO_ID_INICIA_COM_DIGITO = 60;
   /** RegularExpression Id. */
-  int ERRO_INT_LONGO = 61;
+  int ERRO_ID_DIGITOS_CONSECUTIVOS = 61;
   /** RegularExpression Id. */
-  int ERRO_ID_INICIA_COM_DIGITO = 62;
+  int ERRO_ID_TERMINA_COM_DIGITO = 62;
   /** RegularExpression Id. */
-  int ERRO_ID_DIGITOS_CONSECUTIVOS = 63;
+  int IDENTIFIER = 63;
   /** RegularExpression Id. */
-  int ERRO_ID_TERMINA_COM_DIGITO = 64;
+  int LETRA = 64;
   /** RegularExpression Id. */
-  int ERRO_LEXICO = 65;
+  int DIGITO = 65;
+  /** RegularExpression Id. */
+  int ERRO_LEXICO = 66;
 
   /** Lexical state. */
   int DEFAULT = 0;
@@ -163,10 +165,8 @@ public interface CompiladorConstants {
     "\"false\"",
     "<CONST_REAL>",
     "<CONST_INT>",
+    "<ERRO_LITERAL>",
     "<CONST_LITERAL>",
-    "<IDENTIFIER>",
-    "<LETRA>",
-    "<DIGITO>",
     "\"<<=\"",
     "\">>=\"",
     "\"==\"",
@@ -201,6 +201,9 @@ public interface CompiladorConstants {
     "<ERRO_ID_INICIA_COM_DIGITO>",
     "<ERRO_ID_DIGITOS_CONSECUTIVOS>",
     "<ERRO_ID_TERMINA_COM_DIGITO>",
+    "<IDENTIFIER>",
+    "<LETRA>",
+    "<DIGITO>",
     "<ERRO_LEXICO>",
   };
 

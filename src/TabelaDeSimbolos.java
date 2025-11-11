@@ -21,25 +21,8 @@ public class TabelaDeSimbolos {
         this.errorHandler = handler;
     }
 
-    /**
-     * --- CORREÇÃO AQUI ---
-     * A assinatura do método foi alterada para (String, int, int)
-     * para corresponder ao que o Compilador.jj está chamando.
-     */
-    public Simbolo inserir(String lexema, int categoria, int tamanho) {
 
-        // --- VALIDAÇÃO SEMÂNTICA #1 ---
-        // (Movida de volta para cá, pois o .jj não faz mais isso)
-        if (tabela.containsKey(lexema)) {
-            if (errorHandler != null) {
-                // (Usamos 0,0 para linha/coluna pois não temos o Token aqui)
-                errorHandler.addError(String.format(
-                        "Erro Semântico (linha 0, coluna 0): O identificador '%s' já foi declarado.",
-                        lexema
-                ));
-            }
-            return null; // Retorna nulo para indicar falha
-        }
+    public Simbolo inserir(String lexema, int categoria, int tamanho) {
 
         // 'tamanho' já é o inteiro correto (ex: 3 para vetor, -1 para escalar)
         int tam = (tamanho > 0) ? tamanho : -1;

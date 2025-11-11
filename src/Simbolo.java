@@ -5,7 +5,6 @@ public class Simbolo {
     private int base;
     private int tamanho;   // -1 para escalar ("–"), N para vetor
 
-    // Construtor corrigido para aceitar 'lexema'
     public Simbolo(String lexema, int categoria, int base, int tamanho) {
         this.lexema = lexema;
         this.categoria = categoria;
@@ -13,7 +12,6 @@ public class Simbolo {
         this.tamanho = tamanho;
     }
 
-    // --- MÉTODOS QUE ESTAVAM FALTANDO ---
     public String getLexema() {
         return lexema;
     }

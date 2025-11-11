@@ -82,15 +82,8 @@ public class CompilerInterface extends JFrame {
         JScrollPane rolagemEdicao = new JScrollPane(areaEdicao);
         NumeracaoLinhas numeracaoLinhas = new NumeracaoLinhas(areaEdicao);
         rolagemEdicao.setRowHeaderView(numeracaoLinhas);
-
-        // --- CORREÇÃO DO SCROLL DA NUMERAÇÃO DE LINHAS ---
-        // Adiciona um "ouvinte" ao viewport (a área de rolagem) do editor.
-        // Isso garante que a numeração de linhas (numeracaoLinhas)
-        // seja redesenhada CADA VEZ que o usuário mexer a barra de rolagem.
-        rolagemEdicao.getViewport().addChangeListener(e -> {
-            numeracaoLinhas.repaint();
+        rolagemEdicao.getViewport().addChangeListener(e -> {numeracaoLinhas.repaint();
         });
-        // --- FIM DA CORREÇÃO ---
 
         rolagemEdicao.setBorder(BorderFactory.createMatteBorder(1, 1, 1, 1, new Color(206, 214, 224)));
 
@@ -503,7 +496,7 @@ public class CompilerInterface extends JFrame {
 
         ErrorHandler errorHandler = new ErrorHandler();
 
-        // --- FASE 1: ANÁLISE LÉXICA ---
+        // --- ANÁLISE LÉXICA ---
         Compilador analisadorLexico = new Compilador(new StringReader(codigoFonte), errorHandler);
         try {
             Token t;
@@ -514,8 +507,6 @@ public class CompilerInterface extends JFrame {
                                 t.kind <= CompiladorConstants.ERRO_ID_TERMINA_COM_DIGITO) ||
                                 t.kind == CompiladorConstants.ERRO_LEXICO)
                 ) {
-                    // --- CORREÇÃO AQUI ---
-                    // Chama o método correto do ErrorHandler
                     errorHandler.processLexicalError(t, "");
                 }
             } while (t.kind != CompiladorConstants.EOF);
@@ -529,7 +520,6 @@ public class CompilerInterface extends JFrame {
             return;
         }
 
-        // --- PONTO DE DECISÃO (O "PORTÃO") ---
         if (errorHandler.hasErrors()) {
             StringBuilder saidaErros = new StringBuilder();
             saidaErros.append("Foram encontrados erros na ANÁLISE LÉXICA:\n\n");
@@ -545,8 +535,6 @@ public class CompilerInterface extends JFrame {
         try {
             analisadorSintatico.programa();
         } catch (ParseException e) {
-            // --- CORREÇÃO AQUI ---
-            // Chama o método 'processParseException' para traduzir a mensagem
             errorHandler.processParseException(e, "na estrutura principal do programa");
         } catch (Exception e) {
             areaMensagens.setText("Erro inesperado durante a análise:\n\n" + e.getMessage());
@@ -555,7 +543,6 @@ public class CompilerInterface extends JFrame {
             return;
         }
 
-        // --- RESULTADO FINAL ---
         if (errorHandler.hasErrors()) {
             StringBuilder saidaErros = new StringBuilder();
             saidaErros.append("Foram encontrados erros na análise" +":\n\n");
@@ -565,19 +552,15 @@ public class CompilerInterface extends JFrame {
             areaMensagens.setText(saidaErros.toString());
             atualizarStatus("Erro na compilação");
         } else {
-            // SUCESSO!
             areaMensagens.setText("Análise léxica e sintática concluída com sucesso!\n");
             atualizarStatus("Compilação concluída");
 
-            // Pega o código gerado
             String codigoGerado = analisadorSintatico.getCodigoGerado();
 
-            // Preenche a nossa nova janela de código objeto
             preencherCodigoObjeto(codigoGerado);
 
-            // Exibe a janela
             janelaCodigoObjeto.setVisible(true);
-            janelaCodigoObjeto.toFront(); // Traz para a frente da janela principal
+            janelaCodigoObjeto.toFront();
         }
     }
 
@@ -588,19 +571,17 @@ public class CompilerInterface extends JFrame {
     }
 
     private void preencherCodigoObjeto(String codigo) {
-        // 1. Limpa a tabela de dados anteriores
         janelaCodigoObjeto.limparTabela();
 
-        // 2. Validação básica
         if (codigo == null || codigo.trim().isEmpty()) {
-            janelaCodigoObjeto.adicionarLinha("0", "STP", "0"); // Adiciona um "STP" padrão
+            janelaCodigoObjeto.adicionarLinha("0", "STP", "0");
             return;
         }
 
-        // 3. Divide o código em linhas
+        //Divide o código em linhas
         String[] linhas = codigo.split("\n");
 
-        // 4. Itera sobre cada linha e adiciona na tabela
+        // Itera sobre cada linha e adiciona na tabela
         for (String linha : linhas) {
             String linhaLimpa = linha.trim();
 
@@ -610,24 +591,20 @@ public class CompilerInterface extends JFrame {
             }
 
             try {
-                // Remove os parênteses: "(1, ALI, 5)" -> "1, ALI, 5"
+                // Remove os parênteses"
                 String content = linhaLimpa.substring(1, linhaLimpa.length() - 1);
 
-                // Divide pela vírgula (limitando a 3 partes)
-                // "1, ALI, 5" -> ["1", " ALI", " 5"]
                 String[] partes = content.split(",", 3);
 
-                // Verifica se temos as 3 partes esperadas
                 if (partes.length == 3) {
                     String endereco = partes[0].trim();
                     String instrucao = partes[1].trim().toUpperCase();
                     String parametro = partes[2].trim();
 
-                    // Adiciona na tabela na ordem correta
+                    // Adiciona na tabela
                     janelaCodigoObjeto.adicionarLinha(endereco, instrucao, parametro);
                 }
             } catch (Exception e) {
-                // Se algo der errado no parsing da linha, apenas ignora
                 System.err.println("Erro ao parsear linha do código objeto: " + linhaLimpa);
             }
         }
@@ -854,7 +831,6 @@ public class CompilerInterface extends JFrame {
         }
     }
 
-    // --- CLASSE NumeracaoLinhas COMPLETAMENTE ATUALIZADA ---
     class NumeracaoLinhas extends JPanel {
         private final JTextArea editor;
 
@@ -865,7 +841,6 @@ public class CompilerInterface extends JFrame {
             setForeground(COR_TEXTO_LINHAS);
             setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, COR_BORDA_PAINEL));
 
-            // Define o tamanho preferencial com base na largura dos números
             atualizarTamanho();
 
             editor.getDocument().addDocumentListener(new OuvinteDocumentoSimples(() -> {
@@ -874,7 +849,6 @@ public class CompilerInterface extends JFrame {
             }));
         }
 
-        // Calcula a largura do painel de números
         private void atualizarTamanho() {
             int linhas = editor.getLineCount();
             String textoLinha = String.valueOf(Math.max(1, linhas)); // Pelo menos 1
@@ -888,7 +862,6 @@ public class CompilerInterface extends JFrame {
             }
         }
 
-        // --- MÉTODO paintComponent TOTALMENTE CORRIGIDO ---
         @Override
         protected void paintComponent(Graphics g) {
             super.paintComponent(g);
@@ -901,67 +874,54 @@ public class CompilerInterface extends JFrame {
 
             try {
                 linhaDoCaret = editor.getLineOfOffset(editor.getCaretPosition());
-            } catch (BadLocationException e) {} // Ignora se o caret não for válido
+            } catch (BadLocationException e) {}
 
-            // Pega o retângulo visível DO EDITOR, não do painel de linhas
             Rectangle rectVisivelEditor = editor.getVisibleRect();
             int yVisivel = rectVisivelEditor.y;
             int fimY = yVisivel + rectVisivelEditor.height;
 
             try {
-                // Descobre o offset (índice do caractere) no topo da área visível
                 int offsetInicial = editor.viewToModel2D(new Point(0, yVisivel));
-                // Converte o offset para um número de linha
                 int linhaInicial = editor.getLineOfOffset(offsetInicial);
 
-                // Loop principal
                 int linha = linhaInicial;
                 int totalLinhas = editor.getLineCount();
 
                 while (linha < totalLinhas) {
-                    // Pega o retângulo exato para o início da linha atual
                     Rectangle2D retLinha = editor.modelToView2D(editor.getLineStartOffset(linha));
                     if (retLinha == null) break;
 
                     double yLinhaAbsoluto = retLinha.getY();
 
-                    // Se a linha já está abaixo da área visível, paramos de desenhar
                     if (yLinhaAbsoluto > fimY) {
                         break;
                     }
 
-                    // Posição Y da baseline do texto
                     int yTextoAbsoluto = (int) yLinhaAbsoluto + fm.getAscent();
 
-                    // Converte as coordenadas absolutas do editor para as coordenadas
-                    // relativas do painel de numeração (subtraindo o Y do scroll)
                     int yLinhaRelativo = (int) yLinhaAbsoluto - yVisivel;
                     int yTextoRelativo = yTextoAbsoluto - yVisivel;
 
-                    // 1. Destaque da linha atual (se for a linha do caret)
+                    // Destaque da linha atual (se for a linha do caret)
                     if (linha == linhaDoCaret) {
                         g.setColor(COR_DESTAQUE_LINHA);
                         g.fillRect(0, yLinhaRelativo, getWidth(), alturaLinha);
                     }
 
-                    // 2. Desenha o número da linha
+                    // Desenha o número da linha
                     String numero = String.valueOf(linha + 1);
                     int x = getWidth() - fm.stringWidth(numero) - 8; // Margem direita de 8px
 
                     g.setColor(COR_TEXTO_LINHAS);
                     g.drawString(numero, x, yTextoRelativo);
 
-                    // Vai para a próxima linha
                     linha++;
                 }
 
             } catch (BadLocationException ex) {
-                // Erro de cálculo de localização, ignora o desenho
             }
         }
-        // --- FIM DO MÉTODO paintComponent ---
     }
-    // --- FIM DA CLASSE NumeracaoLinhas ---
 
     public static void main(String[] args) {
         try {

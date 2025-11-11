@@ -28,6 +28,8 @@ public class Compilador {
     private int indiceCorrenteVetor;
     private Token indiceConstante = null;
 
+    private int tipoDaExpressaoAtual;
+
     public Compilador(Reader stream, ErrorHandler handler) {
         this(stream);
         this.errorHandler = handler;
@@ -69,12 +71,25 @@ public class Compilador {
             System.err.println("ERRO LÉXICO FATAL: " + e.getMessage());
         }
     }
+
+    /**
+     * Converte o código da categoria (int) em um nome (String)
+     * para as mensagens de erro.
+     */
+    private String getTipoPorCategoria(int categoria) {
+        switch (categoria) {
+            case 1: return "num";
+            case 2: return "real";
+            case 3: return "text";
+            case 4: return "flag";
+            default: return "desconhecido";
+        }
+    }
 }
 
 PARSER_END(Compilador)
 
 // --- DEFINIÇÕES LÉXICAS ---
-// (Sem alterações)
 SKIP : { " " | "\t" | "\n" | "\r" }
 SPECIAL_TOKEN : {
     < LINE_COMMENT: "//" (~["\n", "\r"])* > |
@@ -124,7 +139,7 @@ TOKEN : {
 TOKEN : { <ERRO_LEXICO: ~[] > }
 
 
-// --- PRODUÇÕES SINTÁTICAS (GLC ANOTADA + MODO PÂNICO) ---
+// --- PRODUÇÕES SINTÁTICAS ---
 
 void programa() :
 {}
@@ -165,7 +180,7 @@ void declaracao() :
 void lista_de_declaracao() :
 {}
 {
-    ( declaracao_de_variaveis() lista_de_declaracao_linha() )+ // Um ou mais
+    ( declaracao_de_variaveis() lista_de_declaracao_linha() )+
 }
 
 void lista_de_declaracao_linha() :
@@ -174,7 +189,6 @@ void lista_de_declaracao_linha() :
     ( declaracao_de_variaveis() lista_de_declaracao_linha() | {} /* epsilon */ )
 }
 
-// --- REGRA COM RECUPERAÇÃO DE ERRO ---
 void declaracao_de_variaveis() :
 {}
 {
@@ -198,14 +212,8 @@ void declaracao_de_variaveis() :
                 }
             }
 
-            listaDeIdentificadoresDaLinha.clear();
-            listaBasesDaLinha.clear();
-            VP = 0;
-            houveInitLinha = false;
-            primeiroBaseInit = -1;
         }
     } catch (ParseException e) {
-        // --- MODO PÂNICO ---
         if (errorHandler != null) {
             errorHandler.processParseException(e, "em declaração de variáveis");
         }
@@ -214,11 +222,17 @@ void declaracao_de_variaveis() :
         while (true) {
             t = getToken(1);
             if (t.kind == EOF || t.kind == START || t.kind == SEMICOLON) {
-                if (t.kind == SEMICOLON) getNextToken(); // Consome o ';'
+                if (t.kind == SEMICOLON) getNextToken();
                 break;
             }
             getNextToken();
         }
+    } finally {
+        listaDeIdentificadoresDaLinha.clear();
+        listaBasesDaLinha.clear();
+        VP = 0;
+        houveInitLinha = false;
+        primeiroBaseInit = -1;
     }
 }
 
@@ -269,7 +283,7 @@ void decl_do_vetor() :
 {}
 {
     (
-        // --- RAMO 1: VETOR ---
+        // --- VETOR ---
         <LBRACKET> constante_inteira() <RBRACKET>
         {
             // #V2
@@ -286,7 +300,7 @@ void decl_do_vetor() :
         }
         inic_vetor()
     |
-        // --- RAMO 2: ESCALAR ---
+        // --- ESCALAR ---
         ( <ASSIGN> valor() { houveInitLinha = true; } | {} /* epsilon */ )
         {
             // #E2
@@ -391,7 +405,6 @@ void valor() :
 void lista_de_comandos() :
 {}
 {
-    // ( ... )* significa "zero ou mais"
     (
         try {
             comando()
@@ -412,13 +425,12 @@ void lista_de_comandos() :
                 getNextToken();
             }
         }
-    )* // Fim do loop
+    )*
 }
 
 void comando() :
 {}
 {
-    // Cada comando é responsável por sua própria recuperação
     (
         atribuicao()
     |   entrada()
@@ -428,7 +440,6 @@ void comando() :
     )
 }
 
-// ATRIBUIÇÃO (CORRIGIDA)
 void atribuicao() :
 {
     Token t;
@@ -443,18 +454,38 @@ void atribuicao() :
             if (simboloLHS == null) {
                 errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
             }
-            this.indiceConstante = null; // Reseta a memória
+            this.indiceConstante = null;
         }
 
-        // 1. Resolve o índice PRIMEIRO
-        { temIndiceLHS = indice(simboloLHS); } // <-- MUDANÇA: Chamando a nova regra unificada
+        { temIndiceLHS = indice(simboloLHS); }
 
         <ASSIGN>
 
-        // 2. Resolve o valor DEPOIS
-        expressao() // Gera o código do VALOR (ex: LDI, 99)
+        { this.tipoDaExpressaoAtual = -1; }
 
-        // #A2 (Validação)
+        expressao()
+
+        {
+            if (simboloLHS != null && this.tipoDaExpressaoAtual != -1) {
+                int tipoDaVariavel = simboloLHS.getCategoria();
+
+                // Evita checar tipo se a variável não foi declarada (erro já reportado)
+                // ou se a expressão for complexa (tipo -1, que ainda não tratamos)
+                if (tipoDaVariavel > 0 && this.tipoDaExpressaoAtual > 0) {
+
+                    if (tipoDaVariavel != this.tipoDaExpressaoAtual) {
+                        String strVariavel = getTipoPorCategoria(tipoDaVariavel);
+                        String strExpressao = getTipoPorCategoria(this.tipoDaExpressaoAtual);
+
+                        errorHandler.addError("Semântico", t.beginLine, t.beginColumn,
+                            "Erro de tipo: não é possível atribuir um valor do tipo '" +
+                            strExpressao + "' para uma variável do tipo '" + strVariavel + "'.");
+                    }
+                }
+            }
+        }
+
+        // #A2
         {
             if (simboloLHS != null) {
                 if (simboloLHS.isVetor() && !temIndiceLHS) {
@@ -465,24 +496,18 @@ void atribuicao() :
             }
         }
 
-        // #A3 (Geração de Código)
+        // #A3
         {
             if (simboloLHS != null) {
                 if (temIndiceLHS) {
                     if (this.indiceConstante != null) {
-                        // --- OTIMIZAÇÃO (Programa A) ---
-                        // Pilha: [VALOR]
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
-                        geradorDeCodigo.gerar("STR", String.valueOf(endereco)); // Usa STR direto
+                        geradorDeCodigo.gerar("STR", String.valueOf(endereco));
                     } else {
-                        // --- ACESSO INDIRETO (Programa B) ---
-                        // Pilha: [ENDERECO, VALOR] (Correto agora)
                         geradorDeCodigo.gerar("STX", "0");
                     }
                 } else {
-                    // --- ESCALAR ---
-                    // Pilha: [VALOR]
                     geradorDeCodigo.gerar("STR", String.valueOf(simboloLHS.getBase()));
                 }
             }
@@ -503,7 +528,7 @@ void atribuicao() :
     }
 }
 
-// ENTRADA (CORRIGIDA)
+// ENTRADA
 void entrada() :
 {
     Token t;
@@ -518,10 +543,10 @@ void entrada() :
             if (simboloLHS == null) {
                 errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
             }
-            this.indiceConstante = null; // Reseta
+            this.indiceConstante = null;
         }
 
-        { temIndiceLHS = indice(simboloLHS); } // <-- MUDANÇA: Chamando a nova regra unificada
+        { temIndiceLHS = indice(simboloLHS); }
 
         {
             if (simboloLHS != null) {
@@ -535,12 +560,10 @@ void entrada() :
 
                 if (temIndiceLHS) {
                      if (this.indiceConstante != null) {
-                        // Otimização para READ (ex: read(v[3]))
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("STR", String.valueOf(endereco));
                     } else {
-                        // Acesso indireto (ex: read(v[i]))
                         geradorDeCodigo.gerar("STX", "0");
                     }
                 } else {
@@ -562,6 +585,24 @@ void entrada() :
             getNextToken();
         }
     }
+}
+
+boolean indice_entrada(Simbolo simboloLHS) :
+{}
+{
+    (
+        <LBRACKET> expressao()
+        {
+            if(simboloLHS != null) {
+                geradorDeCodigo.gerar("LDI", String.valueOf(simboloLHS.getBase() - 1));
+                geradorDeCodigo.gerar("ADD", "0");
+            }
+        }
+        <RBRACKET>
+        { return true; }
+    |
+        {} { return false; } // epsilon
+    )
 }
 
 // SAÍDA
@@ -621,7 +662,6 @@ void selecao() :
         if (errorHandler != null) {
              errorHandler.processParseException(e, "em comando 'if'");
         }
-        // Recuperação: Pula até o ';'
         Token t;
         while (true) {
             t = getToken(1);
@@ -678,7 +718,6 @@ void repeticao() :
         if (errorHandler != null) {
              errorHandler.processParseException(e, "em comando 'loop'");
         }
-        // Recuperação: Pula até o ';'
         Token t;
         while (true) {
             t = getToken(1);
@@ -745,8 +784,7 @@ void maior_prioridade() : {} {
     )
 }
 
-// --- SUBSTITUA A REGRA "elemento()" INTEIRA POR ISTO ---
-
+// --- elemento() ---
 void elemento() :
 {
     Token t;
@@ -755,21 +793,22 @@ void elemento() :
 }
 {
     (
-        // --- RAMO 1: IDENTIFICADOR (com a nova lógica) ---
+        // --- IDENTIFICADOR ---
         t = <IDENTIFIER>
         {
             simboloRHS = tabelaDeSimbolos.buscar(t.image);
             if (simboloRHS == null) {
                 errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' não declarado.");
+                this.tipoDaExpressaoAtual = -1;
+            } else {
+                this.tipoDaExpressaoAtual = simboloRHS.getCategoria(); // Armazena o tipo da variável
             }
-            this.indiceConstante = null; // Reseta a memória
+            this.indiceConstante = null;
         }
 
-        // Esta chamada irá preencher 'this.indiceConstante'
-        // e gerar código de índice, se for variável
-        { temIndiceRHS = indice(simboloRHS); } // <-- MUDANÇA: Chamando a nova regra unificada
+        { temIndiceRHS = indice(simboloRHS); }
 
-        { // #E2 (Geração de Código)
+        { // #E2
 
              if (simboloRHS != null) {
                 // Validação Semântica
@@ -779,17 +818,14 @@ void elemento() :
                     errorHandler.addError("Semântico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloRHS.getLexema() + "' não pode ser indexado.");
                 }
 
-                // Geração de Código
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
-                        // --- OTIMIZAÇÃO (Programa A) ---
                         // O índice foi constante. Calculamos o endereço final.
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloRHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("LDV", String.valueOf(endereco));
                     } else {
-                        // --- ACESSO INDIRETO (Programa B) ---
-                        // A regra 'indice' já gerou o código do ENDEREÇO.
+                        // A regra 'indice' gerou o código do ENDEREÇO.
                         // A pilha está pronta para o LDX.
                         geradorDeCodigo.gerar("LDX", "0");
                     }
@@ -800,52 +836,65 @@ void elemento() :
             }
         }
     |
-        // --- RAMO 2: CONST_INT ---
-        t = <CONST_INT>   { geradorDeCodigo.gerar("LDI", t.image); }
+        // --- CONST_INT ---
+        t = <CONST_INT>
+        {
+            this.tipoDaExpressaoAtual = 1; // 1 = num
+            geradorDeCodigo.gerar("LDI", t.image);
+        }
     |
-        // --- RAMO 3: CONST_REAL ---
-        t = <CONST_REAL>  { geradorDeCodigo.gerar("LDR", t.image); }
+        // ---  CONST_REAL ---
+        t = <CONST_REAL>
+        {
+            this.tipoDaExpressaoAtual = 2; // 2 = real
+            geradorDeCodigo.gerar("LDR", t.image);
+        }
     |
         // --- RAMO 4: CONST_LITERAL ---
-        t = <CONST_LITERAL> { geradorDeCodigo.gerar("LDS", t.image); }
+        t = <CONST_LITERAL>
+        {
+            this.tipoDaExpressaoAtual = 3; // 3 = text
+            geradorDeCodigo.gerar("LDS", t.image);
+        }
     |
-        // --- RAMO 5: TRUE ---
-        t = <TRUE>        { geradorDeCodigo.gerar("LDB", "1"); }
+        // --- TRUE ---
+        t = <TRUE>
+        {
+            this.tipoDaExpressaoAtual = 4; // 4 = flag
+            geradorDeCodigo.gerar("LDB", "1");
+        }
     |
         // --- RAMO 6: FALSE ---
-        t = <FALSE>       { geradorDeCodigo.gerar("LDB", "0"); }
+        t = <FALSE>
+        {
+            this.tipoDaExpressaoAtual = 4; // 4 = flag
+            geradorDeCodigo.gerar("LDB", "0");
+        }
     |
-        // --- RAMO 7: ( expressao ) ---
+        // --- ( expressao ) ---
         <LPAREN> expressao() <RPAREN>
     |
-        // --- RAMO 8: ! ( expressao ) ---
+        // ---  ! ( expressao ) ---
         <OP_LOGIC_NOT> <LPAREN> expressao() <RPAREN>
-        { geradorDeCodigo.gerar("NOT", "0"); }
+        {
+            this.tipoDaExpressaoAtual = 4;
+            geradorDeCodigo.gerar("NOT", "0");
+        }
     )
 }
 
-/**
- * Regra unificada para tratar acesso a índice de vetor.
- * Esta regra faz a otimização de acesso estático (ex: v[3])
- * e também gera o código para acesso dinâmico (ex: v[i+1]).
- *
- * @param simbolo O símbolo (LHS ou RHS) que está sendo acessado.
- * @return true se um índice (ex: [ ... ]) foi encontrado, false caso contrário.
- */
 boolean indice(Simbolo simbolo) :
 { Token tok = null; }
 {
     (
         <LBRACKET>
         (
-            // Ramo 1: Otimização (é uma constante)
             tok = <CONST_INT>
             {
                 this.indiceConstante = tok; // Salva o token, NÃO gera código
             }
         |
-            // Ramo 2: Variável (é uma expressão)
-            expressao() // Gera o código para o VALOR DO ÍNDICE (ex: i+1)
+            expressao() // Gera o código para o VALOR DO ÍNDICE
             {
                 this.indiceConstante = null; // Marca como não-constante
 
@@ -862,7 +911,7 @@ boolean indice(Simbolo simbolo) :
         <RBRACKET>
         { return true; }
     |
-        // Ramo 3: Epsilon (sem índice)
+        // Epsilon
         {} { this.indiceConstante = null; return false; }
     )
 }

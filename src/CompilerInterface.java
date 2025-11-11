@@ -851,14 +851,14 @@ public class CompilerInterface extends JFrame {
 
         private void atualizarTamanho() {
             int linhas = editor.getLineCount();
-            String textoLinha = String.valueOf(Math.max(1, linhas)); // Pelo menos 1
+            String textoLinha = String.valueOf(Math.max(1, linhas));
             FontMetrics fm = editor.getFontMetrics(editor.getFont());
-            int largura = fm.stringWidth(textoLinha) + 16; // 8px de margem em cada lado
+            int largura = fm.stringWidth(textoLinha) + 16;
 
             Dimension dim = getPreferredSize();
             if (dim.width != largura) {
                 setPreferredSize(new Dimension(largura, dim.height));
-                revalidate(); // Avisa o layout manager para re-desenhar
+                revalidate();
             }
         }
 
@@ -902,7 +902,7 @@ public class CompilerInterface extends JFrame {
                     int yLinhaRelativo = (int) yLinhaAbsoluto - yVisivel;
                     int yTextoRelativo = yTextoAbsoluto - yVisivel;
 
-                    // Destaque da linha atual (se for a linha do caret)
+                    // Destaque da linha atual
                     if (linha == linhaDoCaret) {
                         g.setColor(COR_DESTAQUE_LINHA);
                         g.fillRect(0, yLinhaRelativo, getWidth(), alturaLinha);
@@ -910,7 +910,7 @@ public class CompilerInterface extends JFrame {
 
                     // Desenha o número da linha
                     String numero = String.valueOf(linha + 1);
-                    int x = getWidth() - fm.stringWidth(numero) - 8; // Margem direita de 8px
+                    int x = getWidth() - fm.stringWidth(numero) - 8;
 
                     g.setColor(COR_TEXTO_LINHAS);
                     g.drawString(numero, x, yTextoRelativo);

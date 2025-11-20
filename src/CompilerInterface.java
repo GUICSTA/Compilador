@@ -376,6 +376,18 @@ public class CompilerInterface extends JFrame {
     private void acaoSalvarComo() {
         if (seletorArquivos.showSaveDialog(this) == JFileChooser.APPROVE_OPTION) {
             File arquivo = seletorArquivos.getSelectedFile();
+
+            // --- INÍCIO DA ALTERAÇÃO ---
+            // Verifica se o arquivo tem uma extensão válida. Se não, adiciona .txt
+            String caminho = arquivo.getAbsolutePath();
+            if (!caminho.toLowerCase().endsWith(".txt") &&
+                    !caminho.toLowerCase().endsWith(".djt") &&
+                    !caminho.toLowerCase().endsWith(".cmp") &&
+                    !caminho.toLowerCase().endsWith(".java")) {
+
+                arquivo = new File(caminho + ".txt");
+            }
+
             if (arquivo.exists()) {
                 String[] opcoes = {"Sim", "Não"};
                 int opcao = JOptionPane.showOptionDialog(this,

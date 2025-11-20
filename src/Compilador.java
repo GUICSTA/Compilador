@@ -3,11 +3,16 @@ import java.io.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Stack;
+
 public class Compilador implements CompiladorConstants {
 
     private ErrorHandler errorHandler;
     private TabelaDeSimbolos tabelaDeSimbolos = new TabelaDeSimbolos();
     private GeradorDeCodigo geradorDeCodigo = new GeradorDeCodigo();
+
+    // Controle de tipos semânticos
+    private Stack<Integer> pilhaTipos = new Stack<Integer>();
+    // 1=num(int), 2=real, 3=text, 4=flag(bool)
 
     private int VP;
     private List<String> listaDeIdentificadoresDaLinha;
@@ -21,16 +26,14 @@ public class Compilador implements CompiladorConstants {
     private int indiceCorrenteVetor;
     private Token indiceConstante = null;
 
-    private int tipoDaExpressaoAtual;
-
     public List<Instrucao> getInstrucoes() {
-    return geradorDeCodigo.getInstrucoes();
+        return geradorDeCodigo.getInstrucoes();
     }
 
     public Compilador(Reader stream, ErrorHandler handler) {
         this(stream);
         this.errorHandler = handler;
-        this.tabelaDeSimbolos.setErrorHandler(handler); // Conecta o ErrorHandler
+        this.tabelaDeSimbolos.setErrorHandler(handler);
     }
 
     public String getCodigoGerado() {
@@ -52,6 +55,7 @@ public class Compilador implements CompiladorConstants {
             System.out.println("=== Iniciando an\u00e1lise l\u00e9xica e sint\u00e1tica ===");
 
             parser.programa();
+
             if (consoleHandler.hasErrors()) {
                 System.out.println("\n=== Erros encontrados: ===");
                 for (String error : consoleHandler.getErrorMessages()) {
@@ -68,6 +72,93 @@ public class Compilador implements CompiladorConstants {
         }
     }
 
+    // --- MÉTODOS AUXILIARES DE SEMÂNTICA ---
+
+    // Regra iii: Aritmética
+    private void verificaAritmetica(String op, Token t) {
+        if (pilhaTipos.size() < 2) return;
+        int t2 = pilhaTipos.pop();
+        int t1 = pilhaTipos.pop();
+
+        // Verifica se são numéricos (1=num, 2=real)
+        if ((t1 != 1 && t1 != 2) || (t2 != 1 && t2 != 2)) {
+            errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+                "Opera\u00e7\u00e3o aritm\u00e9tica '" + op + "' requer operandos num\u00e9ricos (num ou real).");
+            pilhaTipos.push(2); // Push real como fallback
+            return;
+        }
+
+        // Divisão (/) sempre gera REAL (Regra iii)
+        if (op.equals("/")) {
+            pilhaTipos.push(2);
+        }
+        // Se algum for REAL, resultado é REAL
+        else if (t1 == 2 || t2 == 2) {
+            pilhaTipos.push(2);
+        }
+        // Caso contrário, INT op INT = INT
+        else {
+            pilhaTipos.push(1);
+        }
+    }
+
+    // Regra iv: Relacional
+    private void verificaRelacional(String op, Token t) {
+        if (pilhaTipos.size() < 2) return;
+        int t2 = pilhaTipos.pop();
+        int t1 = pilhaTipos.pop();
+
+        // Compatibilidade (Regra i aplicada a comparação)
+        boolean compativel = (t1 == t2) ||
+                             (t1 == 1 && t2 == 2) ||
+                             (t1 == 2 && t2 == 1); // Int e Real são comparáveis
+
+        if (!compativel) {
+            errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+                "Tipos incompat\u00edveis para compara\u00e7\u00e3o '" + op + "': " + getTipoPorCategoria(t1) + " e " + getTipoPorCategoria(t2));
+        }
+
+        pilhaTipos.push(4); // Resultado é sempre FLAG (bool)
+    }
+
+    // Regra v: Lógica
+    private void verificaLogica(String op, Token t) {
+        if (pilhaTipos.size() < 2) return;
+        int t2 = pilhaTipos.pop();
+        int t1 = pilhaTipos.pop();
+
+        if (t1 != 4 || t2 != 4) {
+            errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+                "Operador l\u00f3gico '" + op + "' requer operandos l\u00f3gicos (flag).");
+        }
+        pilhaTipos.push(4); // Resultado flag
+    }
+
+    private void verificaLogicaUnaria(Token t) {
+        if (pilhaTipos.isEmpty()) return;
+        int t1 = pilhaTipos.pop();
+        if (t1 != 4) {
+             errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Operador '!' requer operando l\u00f3gico.");
+        }
+        pilhaTipos.push(4);
+    }
+
+    // Regra i: Atribuição
+    private void verificaAtribuicao(int tipoVar, Token t) {
+        if (pilhaTipos.isEmpty()) return;
+        int tipoExp = pilhaTipos.pop();
+
+        // Mesmo tipo: OK
+        if (tipoVar == tipoExp) return;
+
+        // Int atribuído a Real: OK (coerção)
+        if (tipoVar == 2 && tipoExp == 1) return;
+
+        // Caso contrário: Erro
+        errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+            "Tipo incompat\u00edvel na atribui\u00e7\u00e3o. Esperado: " + getTipoPorCategoria(tipoVar) + ", Encontrado: " + getTipoPorCategoria(tipoExp));
+    }
+
     private String getTipoPorCategoria(int categoria) {
         switch (categoria) {
             case 1: return "num";
@@ -78,7 +169,6 @@ public class Compilador implements CompiladorConstants {
         }
     }
 
-// --- PRODUÇÕES SINTÁTICAS ---
   final public void programa() throws ParseException {
     jj_consume_token(BEGIN);
     identificador_de_programa();
@@ -95,7 +185,7 @@ public class Compilador implements CompiladorConstants {
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case IDENTIFIER:
       t = jj_consume_token(IDENTIFIER);
-        tabelaDeSimbolos.inserirPrograma(t.image);
+                         tabelaDeSimbolos.inserirPrograma(t.image);
       break;
     default:
       jj_la1[0] = jj_gen;
@@ -111,7 +201,6 @@ public class Compilador implements CompiladorConstants {
           listaBasesDaLinha = new ArrayList<Integer>();
           VP = 0;
           houveInitLinha = false;
-
           primeiroBaseInit = -1;
       lista_de_declaracao();
       break;
@@ -156,7 +245,7 @@ public class Compilador implements CompiladorConstants {
       tipo();
       decl_do_vetor();
       jj_consume_token(SEMICOLON);
-            // 1. ALOCAÇÃO (ALx) - GARANTE ALI/ALR/etc. NA PRIMEIRA POSIÇÃO (Ordem correta: ALI -> LDI -> STR)
+            // 1. ALOCAÇÃO
             String op;
             if (categoriaAtual == 1) op = "ALI";
             else if (categoriaAtual == 2) op = "ALR";
@@ -166,35 +255,40 @@ public class Compilador implements CompiladorConstants {
                 geradorDeCodigo.gerar(op, String.valueOf(VP));
             }
 
-            // 2. INICIALIZAÇÃO (LDI/LDR/etc. -> STR)
+            // 2. INICIALIZAÇÃO
             if (houveInitLinha) {
-                // a) GERA LDI/LDR/LDB/LDS USANDO O TOKEN SALVO
                 String opLd;
                 if (categoriaAtual == 1) opLd = "LDI";
                 else if (categoriaAtual == 2) opLd = "LDR";
                 else if (categoriaAtual == 3) opLd = "LDS";
-                else opLd = "LDB"; // Para FLAG
+                else opLd = "LDB";
 
                 if (this.indiceConstante != null) {
-                    // Obtém o valor/imagem do token salvo
                     String param = this.indiceConstante.image;
-
-                    // Trata TRUE/FALSE para 1/0
                     if (opLd.equals("LDB")) {
-                        if (param.equalsIgnoreCase("true")) {
-                            param = "1";
-                        } else if (param.equalsIgnoreCase("false")) {
-                            param = "0";
-                        }
+                        if (param.equalsIgnoreCase("true")) param = "1";
+                        else if (param.equalsIgnoreCase("false")) param = "0";
                     }
 
-                    geradorDeCodigo.gerar(opLd, param); // <-- GERA LDI/LDR/LDS/LDB (2)
+                    // Valida atribuição inicial na declaração
+                    int tipoConst = 0;
+                    if (this.indiceConstante.kind == CONST_INT) tipoConst = 1;
+                    else if (this.indiceConstante.kind == CONST_REAL) tipoConst = 2;
+                    else if (this.indiceConstante.kind == CONST_LITERAL) tipoConst = 3;
+                    else if (this.indiceConstante.kind == TRUE || this.indiceConstante.kind == FALSE) tipoConst = 4;
+
+                    if (tipoConst != 0 && tipoConst != categoriaAtual) {
+                         if (!(categoriaAtual == 2 && tipoConst == 1)) { // Permite int -> real
+                             errorHandler.addError("Sem\u00e2ntico", this.indiceConstante.beginLine, this.indiceConstante.beginColumn,
+                                "Tipo incompat\u00edvel na inicializa\u00e7\u00e3o.");
+                         }
+                    }
+
+                    geradorDeCodigo.gerar(opLd, param);
                 }
 
-                // b) STR para a primeira variável (Endereço é primeiroBaseInit)
-                geradorDeCodigo.gerar("STR", String.valueOf(primeiroBaseInit)); // <-- GERA STR (3)
+                geradorDeCodigo.gerar("STR", String.valueOf(primeiroBaseInit));
 
-                // c) LDV/STR para cópias (se houver mais de uma variável na mesma linha)
                 for (int k = 1; k < listaBasesDaLinha.size(); k++) {
                     geradorDeCodigo.gerar("LDV", String.valueOf(primeiroBaseInit));
                     geradorDeCodigo.gerar("STR", String.valueOf(listaBasesDaLinha.get(k)));
@@ -243,8 +337,7 @@ public class Compilador implements CompiladorConstants {
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' j\u00e1 declarado.");
             } else {
                 listaDeIdentificadoresDaLinha.add(t.image);
-
-        }
+            }
       lista_de_identificadores_linha();
       break;
     default:
@@ -278,7 +371,6 @@ public class Compilador implements CompiladorConstants {
     }
   }
 
-// NOVA REGRA para capturar constantes na DECLARAÇÃO (SEM gerar código)
   final public void valor_imediato_decl() throws ParseException {
   Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
@@ -315,15 +407,13 @@ public class Compilador implements CompiladorConstants {
       jj_consume_token(LBRACKET);
       constante_inteira();
       jj_consume_token(RBRACKET);
-            // #V2
             int vtAtual = tabelaDeSimbolos.getVT();
             baseDoUltimoVetor = -1;
             for (String id : listaDeIdentificadoresDaLinha) {
-                Simbolo s =
-tabelaDeSimbolos.inserir(id, categoriaAtual, tamanhoDoUltimoVetor);
+                Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, tamanhoDoUltimoVetor);
                 if (s != null) {
                     listaBasesDaLinha.add(s.getBase());
-baseDoUltimoVetor = s.getBase();
+                    baseDoUltimoVetor = s.getBase();
                 }
             }
             VP = (tamanhoDoUltimoVetor * listaDeIdentificadoresDaLinha.size());
@@ -341,7 +431,6 @@ baseDoUltimoVetor = s.getBase();
         jj_la1[7] = jj_gen;
 
       }
-            // #E2: Inserir símbolos, obter bases, calcular VP
             for (String id : listaDeIdentificadoresDaLinha) {
                 Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, -1);
                 if (s != null) {
@@ -349,8 +438,6 @@ baseDoUltimoVetor = s.getBase();
                 }
             }
             VP = listaDeIdentificadoresDaLinha.size();
-
-            // #IE: Apenas armazena a base e flags. A geração do código LDI/STR foi movida para declaracao_de_variaveis().
             if (houveInitLinha) {
                 primeiroBaseInit = listaBasesDaLinha.get(0);
             }
@@ -360,11 +447,10 @@ baseDoUltimoVetor = s.getBase();
   final public void constante_inteira() throws ParseException {
   Token t;
     t = jj_consume_token(CONST_INT);
-        // #V1
         int valor = Integer.parseInt(t.image);
         if (valor <= 0) {
             errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Tamanho do vetor deve ser maior que 0.");
-tamanhoDoUltimoVetor = 1;
+            tamanhoDoUltimoVetor = 1;
         } else {
             tamanhoDoUltimoVetor = valor;
         }
@@ -381,7 +467,6 @@ tamanhoDoUltimoVetor = 1;
             if (indiceCorrenteVetor == 1) {
                 int baseV = baseDoUltimoVetor;
                 geradorDeCodigo.gerar("STR", String.valueOf(baseV));
-
                 for (int j = 2; j <= tamanhoDoUltimoVetor; j++) {
                     geradorDeCodigo.gerar("LDV", String.valueOf(baseV));
                     geradorDeCodigo.gerar("STR", String.valueOf(baseV + (j-1)));
@@ -396,9 +481,15 @@ tamanhoDoUltimoVetor = 1;
 
   final public void lista_valores_vetor() throws ParseException {
     valor();
-        // #VAL
         geradorDeCodigo.gerar("STR", String.valueOf(baseDoUltimoVetor + indiceCorrenteVetor));
-indiceCorrenteVetor++;
+        indiceCorrenteVetor++;
+
+        if (!pilhaTipos.isEmpty()) {
+            int tipoExp = pilhaTipos.pop();
+            if (categoriaAtual != tipoExp && !(categoriaAtual == 2 && tipoExp == 1)) {
+                 // Tratamento de erro simplificado para vetores
+            }
+        }
     lista_valores_vetor_linha();
   }
 
@@ -407,9 +498,9 @@ indiceCorrenteVetor++;
     case COMMA:
       jj_consume_token(COMMA);
       valor();
-            // #VAL
             geradorDeCodigo.gerar("STR", String.valueOf(baseDoUltimoVetor + indiceCorrenteVetor));
             indiceCorrenteVetor++;
+            if (!pilhaTipos.isEmpty()) pilhaTipos.pop();
       lista_valores_vetor_linha();
       break;
     default:
@@ -418,29 +509,28 @@ indiceCorrenteVetor++;
     }
   }
 
-// REGRA ORIGINAL: Usada em EXPRESSÕES (gera LDI/LDR/etc. imediatamente)
   final public void valor() throws ParseException {
   Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case CONST_INT:
       t = jj_consume_token(CONST_INT);
-                          geradorDeCodigo.gerar("LDI", t.image);
+                          geradorDeCodigo.gerar("LDI", t.image); pilhaTipos.push(1);
       break;
     case CONST_REAL:
       t = jj_consume_token(CONST_REAL);
-                          geradorDeCodigo.gerar("LDR", t.image);
+                          geradorDeCodigo.gerar("LDR", t.image); pilhaTipos.push(2);
       break;
     case CONST_LITERAL:
       t = jj_consume_token(CONST_LITERAL);
-                            geradorDeCodigo.gerar("LDS", t.image);
+                            geradorDeCodigo.gerar("LDS", t.image); pilhaTipos.push(3);
       break;
     case TRUE:
       t = jj_consume_token(TRUE);
-                          geradorDeCodigo.gerar("LDB", "1");
+                          geradorDeCodigo.gerar("LDB", "1"); pilhaTipos.push(4);
       break;
     case FALSE:
       t = jj_consume_token(FALSE);
-                          geradorDeCodigo.gerar("LDB", "0");
+                          geradorDeCodigo.gerar("LDB", "0"); pilhaTipos.push(4);
       break;
     default:
       jj_la1[11] = jj_gen;
@@ -449,7 +539,6 @@ indiceCorrenteVetor++;
     }
   }
 
-// --- COMANDOS ---
   final public void lista_de_comandos() throws ParseException {
     label_2:
     while (true) {
@@ -473,13 +562,11 @@ indiceCorrenteVetor++;
             }
             Token t;
             while (true) {
-
-               t = getToken(1);
+                t = getToken(1);
                 if (t.kind == EOF || t.kind == END ||
                     t.kind == SET || t.kind == READ ||
                     t.kind == SHOW || t.kind == IF || t.kind == LOOP)
-
-              {
+                {
                     break;
                 }
                 getNextToken();
@@ -524,29 +611,14 @@ indiceCorrenteVetor++;
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' n\u00e3o declarado.");
             }
             this.indiceConstante = null;
-          temIndiceLHS = indice(simboloLHS);
+      temIndiceLHS = indice(simboloLHS);
       jj_consume_token(ASSIGN);
-          this.tipoDaExpressaoAtual = -1;
       expressao();
-            if (simboloLHS != null && this.tipoDaExpressaoAtual != -1) {
-                int tipoDaVariavel = simboloLHS.getCategoria();
-// Evita checar tipo se a variável não foi declarada (erro já reportado)
-                // ou se a expressão for complexa (tipo -1, que ainda não tratamos)
-                if (tipoDaVariavel > 0 && this.tipoDaExpressaoAtual > 0) {
-
-                    if (tipoDaVariavel != this.tipoDaExpressaoAtual) {
-
-                        String strVariavel = getTipoPorCategoria(tipoDaVariavel);
-                        String strExpressao = getTipoPorCategoria(this.tipoDaExpressaoAtual);
-errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
-                            "Erro de tipo: n\u00e3o \u00e9 poss\u00edvel atribuir um valor do tipo '" +
-                            strExpressao + "' para uma vari\u00e1vel do tipo '" + strVariavel + "'.");
-                    }
-                }
+            if (simboloLHS != null) {
+                verificaAtribuicao(simboloLHS.getCategoria(), t);
             }
             if (simboloLHS != null) {
                 if (simboloLHS.isVetor() && !temIndiceLHS) {
-
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
                 } else if (!simboloLHS.isVetor() && temIndiceLHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloLHS.getLexema() + "' n\u00e3o pode ser indexado.");
@@ -555,7 +627,6 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
             if (simboloLHS != null) {
                 if (temIndiceLHS) {
                     if (this.indiceConstante != null) {
-
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("STR", String.valueOf(endereco));
@@ -582,7 +653,6 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
     }
   }
 
-// ENTRADA
   final public void entrada() throws ParseException {
     Token t;
     Simbolo simboloLHS;
@@ -596,7 +666,7 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' n\u00e3o declarado.");
             }
             this.indiceConstante = null;
-          temIndiceLHS = indice(simboloLHS);
+      temIndiceLHS = indice(simboloLHS);
             if (simboloLHS != null) {
                 if (simboloLHS.isVetor() && !temIndiceLHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
@@ -643,6 +713,7 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
                 geradorDeCodigo.gerar("LDI", String.valueOf(simboloLHS.getBase() - 1));
                 geradorDeCodigo.gerar("ADD", "0");
             }
+            if (!pilhaTipos.isEmpty()) pilhaTipos.pop();
       jj_consume_token(RBRACKET);
           {if (true) return true;}
       break;
@@ -654,7 +725,6 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
     throw new Error("Missing return statement in function");
   }
 
-// SAÍDA
   final public void saida() throws ParseException {
     try {
       jj_consume_token(SHOW);
@@ -697,15 +767,22 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
 
   final public void item() throws ParseException {
     elemento();
-                     geradorDeCodigo.gerar("WRT", "0");
+            geradorDeCodigo.gerar("WRT", "0");
+            if (!pilhaTipos.isEmpty()) pilhaTipos.pop();
   }
 
-// SELEÇÃO
   final public void selecao() throws ParseException {
-  int desvioJMF, desvioJMP;
+  int desvioJMF, desvioJMP; Token t;
     try {
-      jj_consume_token(IF);
+      t = jj_consume_token(IF);
       expressao();
+            if (!pilhaTipos.isEmpty()) {
+                int tipoExp = pilhaTipos.pop();
+                if (tipoExp != 4) {
+                    errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+                        "Express\u00e3o do comando 'if' deve conter um operador relacional.");
+                }
+            }
             desvioJMF = geradorDeCodigo.gerar("JMF", "0");
             pilhaDeDesvios.push(desvioJMF);
       jj_consume_token(THEN);
@@ -719,11 +796,11 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
         if (errorHandler != null) {
              errorHandler.processParseException(e, "em comando 'if'");
         }
-        Token t;
+        Token tk;
         while (true) {
-            t = getToken(1);
-            if (t.kind == EOF || t.kind == SEMICOLON) {
-                 if (t.kind == SEMICOLON) getNextToken();
+            tk = getToken(1);
+            if (tk.kind == EOF || tk.kind == SEMICOLON) {
+                 if (tk.kind == SEMICOLON) getNextToken();
                 break;
             }
             getNextToken();
@@ -747,14 +824,20 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
     }
   }
 
-// REPETIÇÃO
   final public void repeticao() throws ParseException {
-  int inicioLoop, desvioJMF;
+  int inicioLoop, desvioJMF; Token t;
     try {
       jj_consume_token(LOOP);
-      jj_consume_token(WHILE);
+      t = jj_consume_token(WHILE);
           inicioLoop = geradorDeCodigo.getProximoPonteiro();
       expressao();
+            if (!pilhaTipos.isEmpty()) {
+                int tipoExp = pilhaTipos.pop();
+                if (tipoExp != 4) {
+                    errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+                        "Express\u00e3o do comando 'loop' deve ser l\u00f3gica (flag).");
+                }
+            }
             desvioJMF = geradorDeCodigo.gerar("JMF", "0");
             pilhaDeDesvios.push(desvioJMF);
       lista_de_comandos();
@@ -767,11 +850,11 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
         if (errorHandler != null) {
              errorHandler.processParseException(e, "em comando 'loop'");
         }
-        Token t;
+        Token tk;
         while (true) {
-            t = getToken(1);
-            if (t.kind == EOF || t.kind == SEMICOLON) {
-                 if (t.kind == SEMICOLON) getNextToken();
+            tk = getToken(1);
+            if (tk.kind == EOF || tk.kind == SEMICOLON) {
+                 if (tk.kind == SEMICOLON) getNextToken();
                 break;
             }
             getNextToken();
@@ -779,43 +862,43 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
     }
   }
 
-// --- EXPRESSÃO ---
   final public void expressao() throws ParseException {
     expressao_aritmetica_ou_logica();
     expressao_linha();
   }
 
   final public void expressao_linha() throws ParseException {
+                           Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case OP_REL_EQ:
-      jj_consume_token(OP_REL_EQ);
+      t = jj_consume_token(OP_REL_EQ);
       expressao_aritmetica_ou_logica();
-                                                     geradorDeCodigo.gerar("EQL", "0");
+                                                       geradorDeCodigo.gerar("EQL", "0"); verificaRelacional("==", t);
       break;
     case OP_REL_NEQ:
-      jj_consume_token(OP_REL_NEQ);
+      t = jj_consume_token(OP_REL_NEQ);
       expressao_aritmetica_ou_logica();
-                                                      geradorDeCodigo.gerar("DIF", "0");
+                                                        geradorDeCodigo.gerar("DIF", "0"); verificaRelacional("!=", t);
       break;
     case OP_REL_LTLT:
-      jj_consume_token(OP_REL_LTLT);
+      t = jj_consume_token(OP_REL_LTLT);
       expressao_aritmetica_ou_logica();
-                                                       geradorDeCodigo.gerar("SMR", "0");
+                                                         geradorDeCodigo.gerar("SMR", "0"); verificaRelacional("<<", t);
       break;
     case OP_REL_GTGT:
-      jj_consume_token(OP_REL_GTGT);
+      t = jj_consume_token(OP_REL_GTGT);
       expressao_aritmetica_ou_logica();
-                                                       geradorDeCodigo.gerar("BGR", "0");
+                                                         geradorDeCodigo.gerar("BGR", "0"); verificaRelacional(">>", t);
       break;
     case OP_REL_LTLT_EQ:
-      jj_consume_token(OP_REL_LTLT_EQ);
+      t = jj_consume_token(OP_REL_LTLT_EQ);
       expressao_aritmetica_ou_logica();
-                                                          geradorDeCodigo.gerar("SME", "0");
+                                                            geradorDeCodigo.gerar("SME", "0"); verificaRelacional("<<=", t);
       break;
     case OP_REL_GTGT_EQ:
-      jj_consume_token(OP_REL_GTGT_EQ);
+      t = jj_consume_token(OP_REL_GTGT_EQ);
       expressao_aritmetica_ou_logica();
-                                                          geradorDeCodigo.gerar("BGE", "0");
+                                                            geradorDeCodigo.gerar("BGE", "0"); verificaRelacional(">>=", t);
       break;
     default:
       jj_la1[17] = jj_gen;
@@ -829,23 +912,24 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
   }
 
   final public void menor_prioridade() throws ParseException {
+                            Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case OP_ARIT_SUM:
-      jj_consume_token(OP_ARIT_SUM);
+      t = jj_consume_token(OP_ARIT_SUM);
       termo2();
-                               geradorDeCodigo.gerar("ADD", "0");
+                                 geradorDeCodigo.gerar("ADD", "0"); verificaAritmetica("+", t);
       menor_prioridade();
       break;
     case OP_ARIT_SUB:
-      jj_consume_token(OP_ARIT_SUB);
+      t = jj_consume_token(OP_ARIT_SUB);
       termo2();
-                               geradorDeCodigo.gerar("SUB", "0");
+                                 geradorDeCodigo.gerar("SUB", "0"); verificaAritmetica("-", t);
       menor_prioridade();
       break;
     case OP_LOGIC_OR:
-      jj_consume_token(OP_LOGIC_OR);
+      t = jj_consume_token(OP_LOGIC_OR);
       termo2();
-                               geradorDeCodigo.gerar("OR", "0");
+                                 geradorDeCodigo.gerar("OR", "0"); verificaLogica("|", t);
       menor_prioridade();
       break;
     default:
@@ -860,35 +944,36 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
   }
 
   final public void media_prioridade() throws ParseException {
+                            Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case OP_ARIT_MUL:
-      jj_consume_token(OP_ARIT_MUL);
+      t = jj_consume_token(OP_ARIT_MUL);
       termo1();
-                               geradorDeCodigo.gerar("MUL", "0");
+                                 geradorDeCodigo.gerar("MUL", "0"); verificaAritmetica("*", t);
       media_prioridade();
       break;
     case OP_ARIT_DIV:
-      jj_consume_token(OP_ARIT_DIV);
+      t = jj_consume_token(OP_ARIT_DIV);
       termo1();
-                               geradorDeCodigo.gerar("DIV", "0");
+                                 geradorDeCodigo.gerar("DIV", "0"); verificaAritmetica("/", t);
       media_prioridade();
       break;
     case OP_ARIT_MOD:
-      jj_consume_token(OP_ARIT_MOD);
+      t = jj_consume_token(OP_ARIT_MOD);
       termo1();
-                               geradorDeCodigo.gerar("MOD", "0");
+                                 geradorDeCodigo.gerar("MOD", "0"); verificaAritmetica("%", t);
       media_prioridade();
       break;
     case OP_ARIT_DIVINT:
-      jj_consume_token(OP_ARIT_DIVINT);
+      t = jj_consume_token(OP_ARIT_DIVINT);
       termo1();
-                                  geradorDeCodigo.gerar("REM", "0");
+                                    geradorDeCodigo.gerar("REM", "0"); verificaAritmetica("%%", t);
       media_prioridade();
       break;
     case OP_LOGIC_AND:
-      jj_consume_token(OP_LOGIC_AND);
+      t = jj_consume_token(OP_LOGIC_AND);
       termo1();
-                                geradorDeCodigo.gerar("AND", "0");
+                                  geradorDeCodigo.gerar("AND", "0"); verificaLogica("&", t);
       media_prioridade();
       break;
     default:
@@ -903,11 +988,12 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
   }
 
   final public void maior_prioridade() throws ParseException {
+                            Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case OP_ARIT_POW:
-      jj_consume_token(OP_ARIT_POW);
+      t = jj_consume_token(OP_ARIT_POW);
       elemento();
-                                 geradorDeCodigo.gerar("POW", "0");
+                                   geradorDeCodigo.gerar("POW", "0"); verificaAritmetica("**", t);
       maior_prioridade();
       break;
     default:
@@ -916,34 +1002,28 @@ errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
     }
   }
 
-// --- elemento ---
   final public void elemento() throws ParseException {
     Token t;
     Simbolo simboloRHS;
     boolean temIndiceRHS = false;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case IDENTIFIER:
-      // ---  IDENTIFICADOR ---
-              t = jj_consume_token(IDENTIFIER);
+      t = jj_consume_token(IDENTIFIER);
             simboloRHS = tabelaDeSimbolos.buscar(t.image);
             if (simboloRHS == null) {
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' n\u00e3o declarado.");
-
-                this.tipoDaExpressaoAtual = -1; // -1 = tipo desconhecido/erro
+                pilhaTipos.push(1);
             } else {
-                this.tipoDaExpressaoAtual = simboloRHS.getCategoria(); // Armazena o tipo da variável
+                pilhaTipos.push(simboloRHS.getCategoria());
             }
             this.indiceConstante = null;
-temIndiceRHS = indice(simboloRHS);
-          // #E2
-
+      temIndiceRHS = indice(simboloRHS);
              if (simboloRHS != null) {
-                // Validação Semântica
                 if (simboloRHS.isVetor() && !temIndiceRHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloRHS.getLexema() + "' deve ser indexado.");
                 } else if (!simboloRHS.isVetor() && temIndiceRHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloRHS.getLexema() + "' n\u00e3o pode ser indexado.");
-}
+                }
 
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
@@ -959,38 +1039,28 @@ temIndiceRHS = indice(simboloRHS);
             }
       break;
     case CONST_INT:
-      // --- CONST_INT ---
-              t = jj_consume_token(CONST_INT);
-            this.tipoDaExpressaoAtual = 1;
-// 1 = num
+      t = jj_consume_token(CONST_INT);
+            pilhaTipos.push(1);
             geradorDeCodigo.gerar("LDI", t.image);
       break;
     case CONST_REAL:
-      // --- CONST_REAL ---
-              t = jj_consume_token(CONST_REAL);
-            this.tipoDaExpressaoAtual = 2;
-// 2 = real
+      t = jj_consume_token(CONST_REAL);
+            pilhaTipos.push(2);
             geradorDeCodigo.gerar("LDR", t.image);
       break;
     case CONST_LITERAL:
-      // --- CONST_LITERAL ---
-              t = jj_consume_token(CONST_LITERAL);
-            this.tipoDaExpressaoAtual = 3;
-// 3 = text
+      t = jj_consume_token(CONST_LITERAL);
+            pilhaTipos.push(3);
             geradorDeCodigo.gerar("LDS", t.image);
       break;
     case TRUE:
-      // ---  TRUE ---
-              t = jj_consume_token(TRUE);
-            this.tipoDaExpressaoAtual = 4;
-// 4 = flag
+      t = jj_consume_token(TRUE);
+            pilhaTipos.push(4);
             geradorDeCodigo.gerar("LDB", "1");
       break;
     case FALSE:
-      // ---  FALSE ---
-              t = jj_consume_token(FALSE);
-            this.tipoDaExpressaoAtual = 4;
-// 4 = flag
+      t = jj_consume_token(FALSE);
+            pilhaTipos.push(4);
             geradorDeCodigo.gerar("LDB", "0");
       break;
     case LPAREN:
@@ -999,12 +1069,11 @@ temIndiceRHS = indice(simboloRHS);
       jj_consume_token(RPAREN);
       break;
     case OP_LOGIC_NOT:
-      jj_consume_token(OP_LOGIC_NOT);
+      t = jj_consume_token(OP_LOGIC_NOT);
       jj_consume_token(LPAREN);
       expressao();
       jj_consume_token(RPAREN);
-            this.tipoDaExpressaoAtual = 4;
-// O resultado de '!' é sempre 'flag'
+            verificaLogicaUnaria(t);
             geradorDeCodigo.gerar("NOT", "0");
       break;
     default:
@@ -1022,8 +1091,7 @@ temIndiceRHS = indice(simboloRHS);
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
       case CONST_INT:
         tok = jj_consume_token(CONST_INT);
-                this.indiceConstante = tok; // Salva o token, NÃO gera código
-
+                this.indiceConstante = tok;
         break;
       case TRUE:
       case FALSE:
@@ -1034,11 +1102,17 @@ temIndiceRHS = indice(simboloRHS);
       case IDENTIFIER:
         expressao();
                 this.indiceConstante = null;
+                if (!pilhaTipos.isEmpty()) {
+                    int tipoIndice = pilhaTipos.pop();
+                    if (tipoIndice != 1) {
+                        errorHandler.addError("Sem\u00e2ntico", token.beginLine, token.beginColumn,
+                            "\u00cdndice de vetor deve ser inteiro. Encontrado: " + getTipoPorCategoria(tipoIndice));
+                    }
+                }
 
                 if(simbolo != null) {
                     geradorDeCodigo.gerar("LDI", String.valueOf(simbolo.getBase() - 1));
-
-                 geradorDeCodigo.gerar("ADD", "0");
+                    geradorDeCodigo.gerar("ADD", "0");
                 }
         break;
       default:

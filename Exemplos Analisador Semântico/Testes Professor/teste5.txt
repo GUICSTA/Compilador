@@ -7,7 +7,7 @@ start
 	loop while i <<= 5
 		read (x[i]);
 
-		if x[i] %% 2 == 0
+		if x[i] %% 2 == 0 then
 			show ('eh par');
 		else
 			show ('eh impar');

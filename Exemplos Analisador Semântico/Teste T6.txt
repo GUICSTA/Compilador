@@ -1,0 +1,37 @@
+begin TesteTipos
+define
+    x : num = 10;
+    y : real;
+    z : text = "ola";
+    f : flag;
+    v : num[2];
+start
+    // 1. Coerção Inteiro -> Real (Deve funcionar)
+    set y = 5; 
+    set y = 5 + 2.5;
+
+    // 2. Atribuição Inválida (Deve gerar erro)
+    // set x = 5.5; // Erro: Real em Int
+    // set x = "texto"; // Erro: Text em Int
+
+    // 3. Operações Aritméticas Inválidas (Deve gerar erro)
+    // set x = 10 + "a";
+    // set x = 10 + true;
+
+    // 4. Condicional (Deve funcionar se for bool)
+    if x == 10 then
+        show("x eh 10");
+    else
+        show("x nao eh 10");
+    end;
+
+    // 5. Condicional com Erro (Deve gerar erro)
+    // if x + 1 then // Erro: Expressão aritmética no IF
+    //     show("erro");
+    // end;
+
+    // 6. Vetor
+    set v[1] = 10;
+    // set v[1.5] = 10; // Erro: Índice real (não int)
+
+end.

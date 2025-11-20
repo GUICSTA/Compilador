@@ -7,12 +7,6 @@ import java.util.TreeSet;
 import java.util.Map;
 import java.util.HashMap;
 
-/**
- * [Arquivo: ErrorHandler.java]
- * Classe ErrorHandler atualizada com:
- * 1. Mensagens personalizadas (Gatilhos)
- * 2. Lógica de prioridade de exibição de erros (Léxico > Sintático > Semântico)
- */
 public class ErrorHandler {
 
     private Set<String> lexicalErrors = new LinkedHashSet<>();
@@ -29,13 +23,10 @@ public class ErrorHandler {
         LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_FRACAO_LONGA, "Constante real com parte fracionária muito longa.");
         LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_INTEIRO_LONGO, "Constante real com parte inteira muito longa.");
         LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_REAL_INCOMPLETO, "Constante real malformada (faltam dígitos após o ponto).");
+        LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_STRING_NAO_FINALIZADA, "constante literal não finalizada.");
         LEXICAL_ERROR_MESSAGES.put(CompiladorConstants.ERRO_LEXICO, "Símbolo não reconhecido pela linguagem.");
     }
 
-    /**
-     * Processa uma ParseException (ERRO SINTÁTICO).
-     * (Lógica de mensagens customizadas mantida)
-     */
     public void processParseException(ParseException e, String context) {
         Token errorToken = (e.currentToken.next != null) ? e.currentToken.next : e.currentToken;
         int line = errorToken.beginLine;
@@ -56,14 +47,6 @@ public class ErrorHandler {
         syntacticErrors.add(finalMessage);
     }
 
-    /**
-     * Processa um erro léxico direto (chamado pelo Passo 1 da compilação).
-     * (Lógica de mensagens customizadas mantida)
-     */
-    /**
-     * Processa um erro léxico direto (chamado pelo Passo 1 da compilação).
-     * (Lógica de mensagens customizadas mantida)
-     */
     public void processLexicalError(Token t, String context) {
         if (t == null) return;
 
@@ -96,9 +79,6 @@ public class ErrorHandler {
         lexicalErrors.add(finalMessage);
     }
 
-    /**
-     * Adiciona um erro semântico (chamado pelo .jj)
-     */
     public void addError(String tipo, int linha, int col, String message) {
         if ("Semântico".equals(tipo)) {
             semanticErrors.add(String.format(
@@ -116,15 +96,13 @@ public class ErrorHandler {
         return "'" + t.image.replace("\n", "\\n").replace("\r", "\\r") + "'";
     }
 
-    /**
-     * Método atualizado para incluir os GATILHOS de mensagens personalizadas.
-     * (Totalmente preservado do seu arquivo)
-     */
+    
     private String getExpectedTokensDescription(ParseException e) {
         if (e.expectedTokenSequences == null || e.expectedTokenSequences.length == 0) {
             return "uma expressão válida";
         }
 
+        // 1. Limpeza e Tradução dos Tokens
         Set<String> expected = new TreeSet<>();
         for (int[] sequence : e.expectedTokenSequences) {
             if (sequence.length == 1) {
@@ -143,6 +121,7 @@ public class ErrorHandler {
             }
         }
 
+        // --- GATILHO 1 (Para tipos) ---
         Set<String> tiposEsperados = new TreeSet<>();
         tiposEsperados.add("'num'");
         tiposEsperados.add("'real'");
@@ -153,6 +132,7 @@ public class ErrorHandler {
             return "tipo do identificador";
         }
 
+        // --- GATILHO 2 (Para ';' ou inicialização) ---
         Set<String> initEsperados = new TreeSet<>();
         initEsperados.add("';'");
         initEsperados.add("'='");
@@ -162,6 +142,7 @@ public class ErrorHandler {
             return "';' ou inicialização de identificador";
         }
 
+        // --- GATILHO 3 (Para 'start' faltando 'end') ---
         Set<String> startMissingEnd = new TreeSet<>();
         startMissingEnd.add("'end'");
         startMissingEnd.add("'if'");
@@ -174,6 +155,7 @@ public class ErrorHandler {
             return "esperado 'end;' ou comando";
         }
 
+        // --- GATILHO 4 e 5 (Lógica de Operadores) ---
         boolean temOperador = expected.contains("'+'") || expected.contains("'-'") ||
                 expected.contains("'*'") || expected.contains("'=='") ||
                 expected.contains("'&'") || expected.contains("'|'") ||
@@ -197,15 +179,20 @@ public class ErrorHandler {
             return "esperado: ')' ou indíce do vetor";
         }
 
+        // --- GATILHO 6 (ROBUSTO): Expressão Aritmética Inválida ---
+        // Se a lista de esperados contém NÚMERO e IDENTIFICADOR ao mesmo tempo,
+        // é certeza absoluta que o parser parou num lugar onde começa uma expressão.
+        // (Isso cobre casos como "10 + ;", "10 + *", etc.)
+        if (expected.contains("um número inteiro") && expected.contains("um identificador")) {
+            return "uma expressão aritmética válida";
+        }
+
+        // --- Lógica Padrão (Fallback) ---
         if (expected.isEmpty()) {
             return "uma construção válida";
         }
 
         List<String> expectedList = new ArrayList<>(expected);
-        if (expectedList.size() == 1) {
-            return expectedList.get(0);
-        }
-
         StringBuilder sb = new StringBuilder();
         for (int i = 0; i < expectedList.size(); i++) {
             sb.append(expectedList.get(i));

@@ -2,10 +2,6 @@ import javax.swing.*;
 import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 
-/**
- * Janela para exibir o "Código Objeto" gerado,
- * baseada na imagem fornecida.
- */
 public class JanelaCodigoObjeto extends JFrame {
 
     private JTable tabelaCodigo;
@@ -13,25 +9,22 @@ public class JanelaCodigoObjeto extends JFrame {
 
     public JanelaCodigoObjeto() {
         // Configurações da Janela
-        super("Código objeto"); // Define o título da janela
-        setSize(350, 400); // Um tamanho inicial razoável
-        setLocationRelativeTo(null); // Centralizar na tela (ou no 'owner' se for JDialog)
-        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE); // Apenas fecha esta janela
+        super("Código objeto");
+        setSize(350, 400);
+        setLocationRelativeTo(null);
+        setDefaultCloseOperation(JFrame.DISPOSE_ON_CLOSE);
 
-        // Configurar o Modelo da Tabela
-        String[] colunas = {"Endereço", "Instrução", "Parâmetro"}; // Nomes de exemplo
+        String[] colunas = {"Endereço", "Instrução", "Parâmetro"};
 
         modeloTabela = new DefaultTableModel(colunas, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
-                // "read-only" da nova tela
                 return false;
             }
         };
 
         tabelaCodigo = new JTable(modeloTabela);
 
-        // Impede que o usuário arraste as colunas da nova tela
         tabelaCodigo.getTableHeader().setReorderingAllowed(false);
 
         tabelaCodigo.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);

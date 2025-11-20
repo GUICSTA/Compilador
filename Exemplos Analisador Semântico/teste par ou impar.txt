@@ -1,0 +1,16 @@
+begin ParOuImpar
+define
+    numero : num;
+	resto : num;
+start
+    show("Digite um número: ");
+	read(numero);
+	
+	set resto = numero % 2;
+
+	if(resto ==0 )then
+		show("é par");
+	else
+		show("é impar");
+	end;
+end.

@@ -1,0 +1,27 @@
+begin Fatorial
+
+define
+    numero : num;
+    fatorial : num;
+    i : num;
+
+start
+    show("CALCULADORA DE FATORIAL");
+    show("Digite um numero inteiro nao negativo:");
+    read(numero);
+
+    // 0! = 1 e 1! = 1.
+    set fatorial = 1;
+    set i = numero;
+
+	show("O fatorial de", numero);
+
+    loop while i >> 1
+        set fatorial = fatorial * i;
+
+        set i = i - 1;
+    end;
+
+    show("e:", fatorial);
+
+end.

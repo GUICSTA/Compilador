@@ -1,0 +1,11 @@
+begin 
+define
+	i	: num = 1;
+	x	: num[10];
+start
+	loop while i <<= 10
+		set x[i] = i;
+		show ('x [', i, ' = ', x[i]);
+		set i = i + 1;
+	end;
+end.

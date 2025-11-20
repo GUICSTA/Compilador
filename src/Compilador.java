@@ -3,7 +3,6 @@ import java.io.*;
 import java.util.List;
 import java.util.ArrayList;
 import java.util.Stack;
-
 public class Compilador implements CompiladorConstants {
 
     private ErrorHandler errorHandler;
@@ -23,6 +22,10 @@ public class Compilador implements CompiladorConstants {
     private Token indiceConstante = null;
 
     private int tipoDaExpressaoAtual;
+
+    public List<Instrucao> getInstrucoes() {
+    return geradorDeCodigo.getInstrucoes();
+    }
 
     public Compilador(Reader stream, ErrorHandler handler) {
         this(stream);
@@ -49,7 +52,6 @@ public class Compilador implements CompiladorConstants {
             System.out.println("=== Iniciando an\u00e1lise l\u00e9xica e sint\u00e1tica ===");
 
             parser.programa();
-
             if (consoleHandler.hasErrors()) {
                 System.out.println("\n=== Erros encontrados: ===");
                 for (String error : consoleHandler.getErrorMessages()) {
@@ -66,10 +68,6 @@ public class Compilador implements CompiladorConstants {
         }
     }
 
-    /**
-     * Converte o código da categoria (int) em um nome (String)
-     * para as mensagens de erro.
-     */
     private String getTipoPorCategoria(int categoria) {
         switch (categoria) {
             case 1: return "num";
@@ -113,6 +111,7 @@ public class Compilador implements CompiladorConstants {
           listaBasesDaLinha = new ArrayList<Integer>();
           VP = 0;
           houveInitLinha = false;
+
           primeiroBaseInit = -1;
       lista_de_declaracao();
       break;
@@ -157,6 +156,7 @@ public class Compilador implements CompiladorConstants {
       tipo();
       decl_do_vetor();
       jj_consume_token(SEMICOLON);
+            // 1. ALOCAÇÃO (ALx) - GARANTE ALI/ALR/etc. NA PRIMEIRA POSIÇÃO (Ordem correta: ALI -> LDI -> STR)
             String op;
             if (categoriaAtual == 1) op = "ALI";
             else if (categoriaAtual == 2) op = "ALR";
@@ -166,7 +166,35 @@ public class Compilador implements CompiladorConstants {
                 geradorDeCodigo.gerar(op, String.valueOf(VP));
             }
 
+            // 2. INICIALIZAÇÃO (LDI/LDR/etc. -> STR)
             if (houveInitLinha) {
+                // a) GERA LDI/LDR/LDB/LDS USANDO O TOKEN SALVO
+                String opLd;
+                if (categoriaAtual == 1) opLd = "LDI";
+                else if (categoriaAtual == 2) opLd = "LDR";
+                else if (categoriaAtual == 3) opLd = "LDS";
+                else opLd = "LDB"; // Para FLAG
+
+                if (this.indiceConstante != null) {
+                    // Obtém o valor/imagem do token salvo
+                    String param = this.indiceConstante.image;
+
+                    // Trata TRUE/FALSE para 1/0
+                    if (opLd.equals("LDB")) {
+                        if (param.equalsIgnoreCase("true")) {
+                            param = "1";
+                        } else if (param.equalsIgnoreCase("false")) {
+                            param = "0";
+                        }
+                    }
+
+                    geradorDeCodigo.gerar(opLd, param); // <-- GERA LDI/LDR/LDS/LDB (2)
+                }
+
+                // b) STR para a primeira variável (Endereço é primeiroBaseInit)
+                geradorDeCodigo.gerar("STR", String.valueOf(primeiroBaseInit)); // <-- GERA STR (3)
+
+                // c) LDV/STR para cópias (se houver mais de uma variável na mesma linha)
                 for (int k = 1; k < listaBasesDaLinha.size(); k++) {
                     geradorDeCodigo.gerar("LDV", String.valueOf(primeiroBaseInit));
                     geradorDeCodigo.gerar("STR", String.valueOf(listaBasesDaLinha.get(k)));
@@ -176,7 +204,6 @@ public class Compilador implements CompiladorConstants {
         if (errorHandler != null) {
             errorHandler.processParseException(e, "em declara\u00e7\u00e3o de vari\u00e1veis");
         }
-        // Pula até um ';' ou o início de 'start'
         Token t;
         while (true) {
             t = getToken(1);
@@ -216,7 +243,8 @@ public class Compilador implements CompiladorConstants {
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' j\u00e1 declarado.");
             } else {
                 listaDeIdentificadoresDaLinha.add(t.image);
-            }
+
+        }
       lista_de_identificadores_linha();
       break;
     default:
@@ -250,6 +278,37 @@ public class Compilador implements CompiladorConstants {
     }
   }
 
+// NOVA REGRA para capturar constantes na DECLARAÇÃO (SEM gerar código)
+  final public void valor_imediato_decl() throws ParseException {
+  Token t;
+    switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
+    case CONST_INT:
+      t = jj_consume_token(CONST_INT);
+                          this.indiceConstante = t;
+      break;
+    case CONST_REAL:
+      t = jj_consume_token(CONST_REAL);
+                          this.indiceConstante = t;
+      break;
+    case CONST_LITERAL:
+      t = jj_consume_token(CONST_LITERAL);
+                            this.indiceConstante = t;
+      break;
+    case TRUE:
+      t = jj_consume_token(TRUE);
+                          this.indiceConstante = t;
+      break;
+    case FALSE:
+      t = jj_consume_token(FALSE);
+                          this.indiceConstante = t;
+      break;
+    default:
+      jj_la1[6] = jj_gen;
+      jj_consume_token(-1);
+      throw new ParseException();
+    }
+  }
+
   final public void decl_do_vetor() throws ParseException {
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case LBRACKET:
@@ -260,28 +319,29 @@ public class Compilador implements CompiladorConstants {
             int vtAtual = tabelaDeSimbolos.getVT();
             baseDoUltimoVetor = -1;
             for (String id : listaDeIdentificadoresDaLinha) {
-                Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, tamanhoDoUltimoVetor);
+                Simbolo s =
+tabelaDeSimbolos.inserir(id, categoriaAtual, tamanhoDoUltimoVetor);
                 if (s != null) {
                     listaBasesDaLinha.add(s.getBase());
-                    baseDoUltimoVetor = s.getBase();
+baseDoUltimoVetor = s.getBase();
                 }
             }
             VP = (tamanhoDoUltimoVetor * listaDeIdentificadoresDaLinha.size());
       inic_vetor();
       break;
     default:
-      jj_la1[7] = jj_gen;
+      jj_la1[8] = jj_gen;
       switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
       case ASSIGN:
         jj_consume_token(ASSIGN);
-        valor();
-                             houveInitLinha = true;
+        valor_imediato_decl();
+                                           houveInitLinha = true;
         break;
       default:
-        jj_la1[6] = jj_gen;
+        jj_la1[7] = jj_gen;
 
       }
-            // #E2
+            // #E2: Inserir símbolos, obter bases, calcular VP
             for (String id : listaDeIdentificadoresDaLinha) {
                 Simbolo s = tabelaDeSimbolos.inserir(id, categoriaAtual, -1);
                 if (s != null) {
@@ -289,10 +349,10 @@ public class Compilador implements CompiladorConstants {
                 }
             }
             VP = listaDeIdentificadoresDaLinha.size();
+
+            // #IE: Apenas armazena a base e flags. A geração do código LDI/STR foi movida para declaracao_de_variaveis().
             if (houveInitLinha) {
-                // #IE
                 primeiroBaseInit = listaBasesDaLinha.get(0);
-                geradorDeCodigo.gerar("STR", String.valueOf(primeiroBaseInit));
             }
     }
   }
@@ -304,7 +364,7 @@ public class Compilador implements CompiladorConstants {
         int valor = Integer.parseInt(t.image);
         if (valor <= 0) {
             errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Tamanho do vetor deve ser maior que 0.");
-            tamanhoDoUltimoVetor = 1;
+tamanhoDoUltimoVetor = 1;
         } else {
             tamanhoDoUltimoVetor = valor;
         }
@@ -321,6 +381,7 @@ public class Compilador implements CompiladorConstants {
             if (indiceCorrenteVetor == 1) {
                 int baseV = baseDoUltimoVetor;
                 geradorDeCodigo.gerar("STR", String.valueOf(baseV));
+
                 for (int j = 2; j <= tamanhoDoUltimoVetor; j++) {
                     geradorDeCodigo.gerar("LDV", String.valueOf(baseV));
                     geradorDeCodigo.gerar("STR", String.valueOf(baseV + (j-1)));
@@ -328,7 +389,7 @@ public class Compilador implements CompiladorConstants {
             }
       break;
     default:
-      jj_la1[8] = jj_gen;
+      jj_la1[9] = jj_gen;
 
     }
   }
@@ -337,7 +398,7 @@ public class Compilador implements CompiladorConstants {
     valor();
         // #VAL
         geradorDeCodigo.gerar("STR", String.valueOf(baseDoUltimoVetor + indiceCorrenteVetor));
-        indiceCorrenteVetor++;
+indiceCorrenteVetor++;
     lista_valores_vetor_linha();
   }
 
@@ -352,11 +413,12 @@ public class Compilador implements CompiladorConstants {
       lista_valores_vetor_linha();
       break;
     default:
-      jj_la1[9] = jj_gen;
+      jj_la1[10] = jj_gen;
 
     }
   }
 
+// REGRA ORIGINAL: Usada em EXPRESSÕES (gera LDI/LDR/etc. imediatamente)
   final public void valor() throws ParseException {
   Token t;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
@@ -381,7 +443,7 @@ public class Compilador implements CompiladorConstants {
                           geradorDeCodigo.gerar("LDB", "0");
       break;
     default:
-      jj_la1[10] = jj_gen;
+      jj_la1[11] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -400,24 +462,25 @@ public class Compilador implements CompiladorConstants {
         ;
         break;
       default:
-        jj_la1[11] = jj_gen;
+        jj_la1[12] = jj_gen;
         break label_2;
       }
       try {
         comando();
       } catch (ParseException e) {
-            // --- MODO PÂNICO (para comandos) ---
             if (errorHandler != null) {
                  errorHandler.processParseException(e, "em comando");
             }
             Token t;
             while (true) {
-                t = getToken(1);
+
+               t = getToken(1);
                 if (t.kind == EOF || t.kind == END ||
                     t.kind == SET || t.kind == READ ||
                     t.kind == SHOW || t.kind == IF || t.kind == LOOP)
-                {
-                    break; // Ponto seguro
+
+              {
+                    break;
                 }
                 getNextToken();
             }
@@ -443,7 +506,7 @@ public class Compilador implements CompiladorConstants {
       repeticao();
       break;
     default:
-      jj_la1[12] = jj_gen;
+      jj_la1[13] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -467,16 +530,15 @@ public class Compilador implements CompiladorConstants {
       expressao();
             if (simboloLHS != null && this.tipoDaExpressaoAtual != -1) {
                 int tipoDaVariavel = simboloLHS.getCategoria();
-
-                // Evita checar tipo se a variável não foi declarada (erro já reportado)
+// Evita checar tipo se a variável não foi declarada (erro já reportado)
                 // ou se a expressão for complexa (tipo -1, que ainda não tratamos)
                 if (tipoDaVariavel > 0 && this.tipoDaExpressaoAtual > 0) {
 
                     if (tipoDaVariavel != this.tipoDaExpressaoAtual) {
+
                         String strVariavel = getTipoPorCategoria(tipoDaVariavel);
                         String strExpressao = getTipoPorCategoria(this.tipoDaExpressaoAtual);
-
-                        errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
+errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn,
                             "Erro de tipo: n\u00e3o \u00e9 poss\u00edvel atribuir um valor do tipo '" +
                             strExpressao + "' para uma vari\u00e1vel do tipo '" + strVariavel + "'.");
                     }
@@ -484,6 +546,7 @@ public class Compilador implements CompiladorConstants {
             }
             if (simboloLHS != null) {
                 if (simboloLHS.isVetor() && !temIndiceLHS) {
+
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloLHS.getLexema() + "' deve ser indexado.");
                 } else if (!simboloLHS.isVetor() && temIndiceLHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloLHS.getLexema() + "' n\u00e3o pode ser indexado.");
@@ -492,6 +555,7 @@ public class Compilador implements CompiladorConstants {
             if (simboloLHS != null) {
                 if (temIndiceLHS) {
                     if (this.indiceConstante != null) {
+
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("STR", String.valueOf(endereco));
@@ -511,7 +575,7 @@ public class Compilador implements CompiladorConstants {
             t = getToken(1);
             if (t.kind == EOF || t.kind == SEMICOLON) {
                  if (t.kind == SEMICOLON) getNextToken();
-                 break;
+                break;
             }
             getNextToken();
         }
@@ -541,9 +605,8 @@ public class Compilador implements CompiladorConstants {
                 }
 
                 geradorDeCodigo.gerar("REA", String.valueOf(simboloLHS.getCategoria()));
-
                 if (temIndiceLHS) {
-                     if (this.indiceConstante != null) {
+                    if (this.indiceConstante != null) {
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloLHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("STR", String.valueOf(endereco));
@@ -564,7 +627,7 @@ public class Compilador implements CompiladorConstants {
             t = getToken(1);
             if (t.kind == EOF || t.kind == SEMICOLON) {
                  if (t.kind == SEMICOLON) getNextToken();
-                 break;
+                break;
             }
             getNextToken();
         }
@@ -584,7 +647,7 @@ public class Compilador implements CompiladorConstants {
           {if (true) return true;}
       break;
     default:
-      jj_la1[13] = jj_gen;
+      jj_la1[14] = jj_gen;
 
              {if (true) return false;}
     }
@@ -608,7 +671,7 @@ public class Compilador implements CompiladorConstants {
             t = getToken(1);
             if (t.kind == EOF || t.kind == SEMICOLON) {
                  if (t.kind == SEMICOLON) getNextToken();
-                 break;
+                break;
             }
             getNextToken();
         }
@@ -624,7 +687,7 @@ public class Compilador implements CompiladorConstants {
         ;
         break;
       default:
-        jj_la1[14] = jj_gen;
+        jj_la1[15] = jj_gen;
         break label_3;
       }
       jj_consume_token(COMMA);
@@ -661,7 +724,7 @@ public class Compilador implements CompiladorConstants {
             t = getToken(1);
             if (t.kind == EOF || t.kind == SEMICOLON) {
                  if (t.kind == SEMICOLON) getNextToken();
-                 break;
+                break;
             }
             getNextToken();
         }
@@ -679,7 +742,7 @@ public class Compilador implements CompiladorConstants {
       lista_de_comandos();
       break;
     default:
-      jj_la1[15] = jj_gen;
+      jj_la1[16] = jj_gen;
 
     }
   }
@@ -709,7 +772,7 @@ public class Compilador implements CompiladorConstants {
             t = getToken(1);
             if (t.kind == EOF || t.kind == SEMICOLON) {
                  if (t.kind == SEMICOLON) getNextToken();
-                 break;
+                break;
             }
             getNextToken();
         }
@@ -755,7 +818,7 @@ public class Compilador implements CompiladorConstants {
                                                           geradorDeCodigo.gerar("BGE", "0");
       break;
     default:
-      jj_la1[16] = jj_gen;
+      jj_la1[17] = jj_gen;
 
     }
   }
@@ -786,7 +849,7 @@ public class Compilador implements CompiladorConstants {
       menor_prioridade();
       break;
     default:
-      jj_la1[17] = jj_gen;
+      jj_la1[18] = jj_gen;
 
     }
   }
@@ -829,7 +892,7 @@ public class Compilador implements CompiladorConstants {
       media_prioridade();
       break;
     default:
-      jj_la1[18] = jj_gen;
+      jj_la1[19] = jj_gen;
 
     }
   }
@@ -848,29 +911,30 @@ public class Compilador implements CompiladorConstants {
       maior_prioridade();
       break;
     default:
-      jj_la1[19] = jj_gen;
+      jj_la1[20] = jj_gen;
 
     }
   }
 
-// --- elemento() ---
+// --- elemento ---
   final public void elemento() throws ParseException {
     Token t;
     Simbolo simboloRHS;
     boolean temIndiceRHS = false;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case IDENTIFIER:
-      // --- IDENTIFICADOR ---
+      // ---  IDENTIFICADOR ---
               t = jj_consume_token(IDENTIFIER);
             simboloRHS = tabelaDeSimbolos.buscar(t.image);
             if (simboloRHS == null) {
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' n\u00e3o declarado.");
-                this.tipoDaExpressaoAtual = -1;
+
+                this.tipoDaExpressaoAtual = -1; // -1 = tipo desconhecido/erro
             } else {
                 this.tipoDaExpressaoAtual = simboloRHS.getCategoria(); // Armazena o tipo da variável
             }
             this.indiceConstante = null;
-          temIndiceRHS = indice(simboloRHS);
+temIndiceRHS = indice(simboloRHS);
           // #E2
 
              if (simboloRHS != null) {
@@ -879,21 +943,17 @@ public class Compilador implements CompiladorConstants {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador de vetor '" + simboloRHS.getLexema() + "' deve ser indexado.");
                 } else if (!simboloRHS.isVetor() && temIndiceRHS) {
                     errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador escalar '" + simboloRHS.getLexema() + "' n\u00e3o pode ser indexado.");
-                }
+}
 
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
-                        // O índice foi constante. Calculamos o endereço final.
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloRHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("LDV", String.valueOf(endereco));
                     } else {
-                        // A regra 'indice' gerou o código do ENDEREÇO.
-                        // A pilha está pronta para o LDX.
                         geradorDeCodigo.gerar("LDX", "0");
                     }
                 } else {
-                    // --- ESCALAR ---
                     geradorDeCodigo.gerar("LDV", String.valueOf(simboloRHS.getBase()));
                 }
             }
@@ -901,31 +961,36 @@ public class Compilador implements CompiladorConstants {
     case CONST_INT:
       // --- CONST_INT ---
               t = jj_consume_token(CONST_INT);
-            this.tipoDaExpressaoAtual = 1; // 1 = num
+            this.tipoDaExpressaoAtual = 1;
+// 1 = num
             geradorDeCodigo.gerar("LDI", t.image);
       break;
     case CONST_REAL:
-      // ---  CONST_REAL ---
+      // --- CONST_REAL ---
               t = jj_consume_token(CONST_REAL);
-            this.tipoDaExpressaoAtual = 2; // 2 = real
+            this.tipoDaExpressaoAtual = 2;
+// 2 = real
             geradorDeCodigo.gerar("LDR", t.image);
       break;
     case CONST_LITERAL:
-      // --- RAMO 4: CONST_LITERAL ---
+      // --- CONST_LITERAL ---
               t = jj_consume_token(CONST_LITERAL);
-            this.tipoDaExpressaoAtual = 3; // 3 = text
+            this.tipoDaExpressaoAtual = 3;
+// 3 = text
             geradorDeCodigo.gerar("LDS", t.image);
       break;
     case TRUE:
-      // --- TRUE ---
+      // ---  TRUE ---
               t = jj_consume_token(TRUE);
-            this.tipoDaExpressaoAtual = 4; // 4 = flag
+            this.tipoDaExpressaoAtual = 4;
+// 4 = flag
             geradorDeCodigo.gerar("LDB", "1");
       break;
     case FALSE:
-      // --- RAMO 6: FALSE ---
+      // ---  FALSE ---
               t = jj_consume_token(FALSE);
-            this.tipoDaExpressaoAtual = 4; // 4 = flag
+            this.tipoDaExpressaoAtual = 4;
+// 4 = flag
             geradorDeCodigo.gerar("LDB", "0");
       break;
     case LPAREN:
@@ -939,10 +1004,11 @@ public class Compilador implements CompiladorConstants {
       expressao();
       jj_consume_token(RPAREN);
             this.tipoDaExpressaoAtual = 4;
+// O resultado de '!' é sempre 'flag'
             geradorDeCodigo.gerar("NOT", "0");
       break;
     default:
-      jj_la1[20] = jj_gen;
+      jj_la1[21] = jj_gen;
       jj_consume_token(-1);
       throw new ParseException();
     }
@@ -963,23 +1029,20 @@ public class Compilador implements CompiladorConstants {
       case FALSE:
       case CONST_REAL:
       case CONST_LITERAL:
-      case IDENTIFIER:
       case OP_LOGIC_NOT:
       case LPAREN:
+      case IDENTIFIER:
         expressao();
-                this.indiceConstante = null; // Marca como não-constante
+                this.indiceConstante = null;
 
-                // Agora, gera o código para calcular o ENDEREÇO FINAL
                 if(simbolo != null) {
-                    // Pilha: [VALOR_INDICE]
                     geradorDeCodigo.gerar("LDI", String.valueOf(simbolo.getBase() - 1));
-                    // Pilha: [VALOR_INDICE, BASE-1]
-                    geradorDeCodigo.gerar("ADD", "0");
-                    // Pilha: [ENDERECO_FINAL]
+
+                 geradorDeCodigo.gerar("ADD", "0");
                 }
         break;
       default:
-        jj_la1[21] = jj_gen;
+        jj_la1[22] = jj_gen;
         jj_consume_token(-1);
         throw new ParseException();
       }
@@ -987,7 +1050,7 @@ public class Compilador implements CompiladorConstants {
           {if (true) return true;}
       break;
     default:
-      jj_la1[22] = jj_gen;
+      jj_la1[23] = jj_gen;
 
              this.indiceConstante = null; {if (true) return false;}
     }
@@ -1003,7 +1066,7 @@ public class Compilador implements CompiladorConstants {
   public Token jj_nt;
   private int jj_ntk;
   private int jj_gen;
-  final private int[] jj_la1 = new int[23];
+  final private int[] jj_la1 = new int[24];
   static private int[] jj_la1_0;
   static private int[] jj_la1_1;
   static private int[] jj_la1_2;
@@ -1013,13 +1076,13 @@ public class Compilador implements CompiladorConstants {
       jj_la1_init_2();
    }
    private static void jj_la1_init_0() {
-      jj_la1_0 = new int[] {0x10000000,0x100,0x10000000,0x10000000,0x0,0x780000,0x0,0x0,0x0,0x0,0xf800000,0x27800,0x27800,0x0,0x0,0x10000,0x80000000,0x0,0x0,0x0,0x1f800000,0x1f800000,0x0,};
+      jj_la1_0 = new int[] {0x0,0x100,0x0,0x0,0x0,0x780000,0xf800000,0x0,0x0,0x0,0x0,0xf800000,0x27800,0x27800,0x0,0x0,0x10000,0xe0000000,0x0,0x0,0x0,0xf800000,0xf800000,0x0,};
    }
    private static void jj_la1_init_1() {
-      jj_la1_1 = new int[] {0x0,0x0,0x0,0x0,0x20000,0x0,0x8000,0x100000,0x8000,0x20000,0x0,0x0,0x0,0x100000,0x20000,0x0,0x1f,0x2180,0x1e40,0x20,0x44000,0x44000,0x100000,};
+      jj_la1_1 = new int[] {0x80000000,0x0,0x80000000,0x80000000,0x8000,0x0,0x0,0x2000,0x40000,0x2000,0x8000,0x0,0x0,0x0,0x40000,0x8000,0x0,0x7,0x860,0x790,0x8,0x80011000,0x80011000,0x40000,};
    }
    private static void jj_la1_init_2() {
-      jj_la1_2 = new int[] {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,};
+      jj_la1_2 = new int[] {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,};
    }
 
   /** Constructor with InputStream. */
@@ -1033,7 +1096,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -1047,7 +1110,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   /** Constructor. */
@@ -1057,7 +1120,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -1067,7 +1130,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   /** Constructor with generated Token Manager. */
@@ -1076,7 +1139,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   /** Reinitialise. */
@@ -1085,7 +1148,7 @@ public class Compilador implements CompiladorConstants {
     token = new Token();
     jj_ntk = -1;
     jj_gen = 0;
-    for (int i = 0; i < 23; i++) jj_la1[i] = -1;
+    for (int i = 0; i < 24; i++) jj_la1[i] = -1;
   }
 
   private Token jj_consume_token(int kind) throws ParseException {
@@ -1136,12 +1199,12 @@ public class Compilador implements CompiladorConstants {
   /** Generate ParseException. */
   public ParseException generateParseException() {
     jj_expentries.clear();
-    boolean[] la1tokens = new boolean[66];
+    boolean[] la1tokens = new boolean[67];
     if (jj_kind >= 0) {
       la1tokens[jj_kind] = true;
       jj_kind = -1;
     }
-    for (int i = 0; i < 23; i++) {
+    for (int i = 0; i < 24; i++) {
       if (jj_la1[i] == jj_gen) {
         for (int j = 0; j < 32; j++) {
           if ((jj_la1_0[i] & (1<<j)) != 0) {
@@ -1156,7 +1219,7 @@ public class Compilador implements CompiladorConstants {
         }
       }
     }
-    for (int i = 0; i < 66; i++) {
+    for (int i = 0; i < 67; i++) {
       if (la1tokens[i]) {
         jj_expentry = new int[1];
         jj_expentry[0] = i;

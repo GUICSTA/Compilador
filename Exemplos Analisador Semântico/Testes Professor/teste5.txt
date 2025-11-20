@@ -1,0 +1,18 @@
+begin 
+define
+	i	: num;
+	x	: num[5];
+start
+	set i = 1;
+	loop while i <<= 5
+		read (x[i]);
+
+		if x[i] %% 2 == 0
+			show ('eh par');
+		else
+			show ('eh impar');
+		end;
+		
+		set i = i + 1;
+	end;
+end.

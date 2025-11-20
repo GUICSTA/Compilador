@@ -24,6 +24,10 @@ public class Compilador implements CompiladorConstants {
 
     private int tipoDaExpressaoAtual;
 
+    public List<Instrucao> getInstrucoes() {
+    return geradorDeCodigo.getInstrucoes();
+    }
+
     public Compilador(Reader stream, ErrorHandler handler) {
         this(stream);
         this.errorHandler = handler;
@@ -66,10 +70,6 @@ public class Compilador implements CompiladorConstants {
         }
     }
 
-    /**
-     * Converte o código da categoria (int) em um nome (String)
-     * para as mensagens de erro.
-     */
     private String getTipoPorCategoria(int categoria) {
         switch (categoria) {
             case 1: return "num";
@@ -176,7 +176,6 @@ public class Compilador implements CompiladorConstants {
         if (errorHandler != null) {
             errorHandler.processParseException(e, "em declara\u00e7\u00e3o de vari\u00e1veis");
         }
-        // Pula até um ';' ou o início de 'start'
         Token t;
         while (true) {
             t = getToken(1);
@@ -406,7 +405,6 @@ public class Compilador implements CompiladorConstants {
       try {
         comando();
       } catch (ParseException e) {
-            // --- MODO PÂNICO (para comandos) ---
             if (errorHandler != null) {
                  errorHandler.processParseException(e, "em comando");
             }
@@ -417,7 +415,7 @@ public class Compilador implements CompiladorConstants {
                     t.kind == SET || t.kind == READ ||
                     t.kind == SHOW || t.kind == IF || t.kind == LOOP)
                 {
-                    break; // Ponto seguro
+                    break;
                 }
                 getNextToken();
             }
@@ -853,19 +851,19 @@ public class Compilador implements CompiladorConstants {
     }
   }
 
-// --- elemento() ---
+// --- elemento ---
   final public void elemento() throws ParseException {
     Token t;
     Simbolo simboloRHS;
     boolean temIndiceRHS = false;
     switch ((jj_ntk==-1)?jj_ntk():jj_ntk) {
     case IDENTIFIER:
-      // --- IDENTIFICADOR ---
+      // ---  IDENTIFICADOR ---
               t = jj_consume_token(IDENTIFIER);
             simboloRHS = tabelaDeSimbolos.buscar(t.image);
             if (simboloRHS == null) {
                 errorHandler.addError("Sem\u00e2ntico", t.beginLine, t.beginColumn, "Identificador '" + t.image + "' n\u00e3o declarado.");
-                this.tipoDaExpressaoAtual = -1;
+                this.tipoDaExpressaoAtual = -1; // -1 = tipo desconhecido/erro
             } else {
                 this.tipoDaExpressaoAtual = simboloRHS.getCategoria(); // Armazena o tipo da variável
             }
@@ -883,17 +881,13 @@ public class Compilador implements CompiladorConstants {
 
                 if (temIndiceRHS) {
                     if (this.indiceConstante != null) {
-                        // O índice foi constante. Calculamos o endereço final.
                         int indice = Integer.parseInt(this.indiceConstante.image);
                         int endereco = simboloRHS.getBase() + (indice - 1);
                         geradorDeCodigo.gerar("LDV", String.valueOf(endereco));
                     } else {
-                        // A regra 'indice' gerou o código do ENDEREÇO.
-                        // A pilha está pronta para o LDX.
                         geradorDeCodigo.gerar("LDX", "0");
                     }
                 } else {
-                    // --- ESCALAR ---
                     geradorDeCodigo.gerar("LDV", String.valueOf(simboloRHS.getBase()));
                 }
             }
@@ -905,25 +899,25 @@ public class Compilador implements CompiladorConstants {
             geradorDeCodigo.gerar("LDI", t.image);
       break;
     case CONST_REAL:
-      // ---  CONST_REAL ---
+      // --- CONST_REAL ---
               t = jj_consume_token(CONST_REAL);
             this.tipoDaExpressaoAtual = 2; // 2 = real
             geradorDeCodigo.gerar("LDR", t.image);
       break;
     case CONST_LITERAL:
-      // --- RAMO 4: CONST_LITERAL ---
+      // --- CONST_LITERAL ---
               t = jj_consume_token(CONST_LITERAL);
             this.tipoDaExpressaoAtual = 3; // 3 = text
             geradorDeCodigo.gerar("LDS", t.image);
       break;
     case TRUE:
-      // --- TRUE ---
+      // ---  TRUE ---
               t = jj_consume_token(TRUE);
             this.tipoDaExpressaoAtual = 4; // 4 = flag
             geradorDeCodigo.gerar("LDB", "1");
       break;
     case FALSE:
-      // --- RAMO 6: FALSE ---
+      // ---  FALSE ---
               t = jj_consume_token(FALSE);
             this.tipoDaExpressaoAtual = 4; // 4 = flag
             geradorDeCodigo.gerar("LDB", "0");
@@ -938,7 +932,7 @@ public class Compilador implements CompiladorConstants {
       jj_consume_token(LPAREN);
       expressao();
       jj_consume_token(RPAREN);
-            this.tipoDaExpressaoAtual = 4;
+            this.tipoDaExpressaoAtual = 4; // O resultado de '!' é sempre 'flag'
             geradorDeCodigo.gerar("NOT", "0");
       break;
     default:
@@ -963,19 +957,15 @@ public class Compilador implements CompiladorConstants {
       case FALSE:
       case CONST_REAL:
       case CONST_LITERAL:
-      case IDENTIFIER:
       case OP_LOGIC_NOT:
       case LPAREN:
+      case IDENTIFIER:
         expressao();
-                this.indiceConstante = null; // Marca como não-constante
+                this.indiceConstante = null;
 
-                // Agora, gera o código para calcular o ENDEREÇO FINAL
                 if(simbolo != null) {
-                    // Pilha: [VALOR_INDICE]
                     geradorDeCodigo.gerar("LDI", String.valueOf(simbolo.getBase() - 1));
-                    // Pilha: [VALOR_INDICE, BASE-1]
                     geradorDeCodigo.gerar("ADD", "0");
-                    // Pilha: [ENDERECO_FINAL]
                 }
         break;
       default:
@@ -1013,10 +1003,10 @@ public class Compilador implements CompiladorConstants {
       jj_la1_init_2();
    }
    private static void jj_la1_init_0() {
-      jj_la1_0 = new int[] {0x10000000,0x100,0x10000000,0x10000000,0x0,0x780000,0x0,0x0,0x0,0x0,0xf800000,0x27800,0x27800,0x0,0x0,0x10000,0x80000000,0x0,0x0,0x0,0x1f800000,0x1f800000,0x0,};
+      jj_la1_0 = new int[] {0x0,0x100,0x0,0x0,0x0,0x780000,0x0,0x0,0x0,0x0,0xf800000,0x27800,0x27800,0x0,0x0,0x10000,0xe0000000,0x0,0x0,0x0,0xf800000,0xf800000,0x0,};
    }
    private static void jj_la1_init_1() {
-      jj_la1_1 = new int[] {0x0,0x0,0x0,0x0,0x20000,0x0,0x8000,0x100000,0x8000,0x20000,0x0,0x0,0x0,0x100000,0x20000,0x0,0x1f,0x2180,0x1e40,0x20,0x44000,0x44000,0x100000,};
+      jj_la1_1 = new int[] {0x80000000,0x0,0x80000000,0x80000000,0x8000,0x0,0x2000,0x40000,0x2000,0x8000,0x0,0x0,0x0,0x40000,0x8000,0x0,0x7,0x860,0x790,0x8,0x80011000,0x80011000,0x40000,};
    }
    private static void jj_la1_init_2() {
       jj_la1_2 = new int[] {0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,0x0,};
@@ -1136,7 +1126,7 @@ public class Compilador implements CompiladorConstants {
   /** Generate ParseException. */
   public ParseException generateParseException() {
     jj_expentries.clear();
-    boolean[] la1tokens = new boolean[66];
+    boolean[] la1tokens = new boolean[67];
     if (jj_kind >= 0) {
       la1tokens[jj_kind] = true;
       jj_kind = -1;
@@ -1156,7 +1146,7 @@ public class Compilador implements CompiladorConstants {
         }
       }
     }
-    for (int i = 0; i < 66; i++) {
+    for (int i = 0; i < 67; i++) {
       if (la1tokens[i]) {
         jj_expentry = new int[1];
         jj_expentry[0] = i;

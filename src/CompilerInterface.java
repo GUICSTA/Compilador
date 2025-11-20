@@ -23,6 +23,7 @@ public class CompilerInterface extends JFrame {
     private static final Color COR_FUNDO_LINHAS = new Color(229, 236, 245);
     private static final Color COR_TEXTO_LINHAS = new Color(120, 134, 150);
     private static final Color COR_DESTAQUE_LINHA = new Color(213, 226, 241);
+    private java.util.List<Instrucao> instrucoesCompiladas;
 
     private JTextArea areaEdicao;
     private JTextArea areaMensagens;
@@ -505,8 +506,9 @@ public class CompilerInterface extends JFrame {
                 if (t.kind >= 0 && (
                         (t.kind >= CompiladorConstants.ERRO_REAL_FRACAO_LONGA &&
                                 t.kind <= CompiladorConstants.ERRO_ID_TERMINA_COM_DIGITO) ||
-                                t.kind == CompiladorConstants.ERRO_LEXICO)
-                ) {
+                                t.kind == CompiladorConstants.ERRO_LEXICO) ||
+                                t.kind == CompiladorConstants.ERRO_STRING_NAO_FINALIZADA)
+                 {
                     errorHandler.processLexicalError(t, "");
                 }
             } while (t.kind != CompiladorConstants.EOF);
@@ -559,15 +561,28 @@ public class CompilerInterface extends JFrame {
 
             preencherCodigoObjeto(codigoGerado);
 
+
+            this.instrucoesCompiladas = analisadorSintatico.getInstrucoes();            
             janelaCodigoObjeto.setVisible(true);
             janelaCodigoObjeto.toFront();
+            
         }
     }
 
-    private void acaoExecutar() {
-        areaMensagens.setText("Executando o programa...\n");
-        areaMensagens.append("Funcionalidade de execução ainda não implementada.\n");
-        atualizarStatus("Execução finalizada");
+private void acaoExecutar() {
+        
+        if (this.instrucoesCompiladas == null || this.instrucoesCompiladas.isEmpty()) {
+            JOptionPane.showMessageDialog(this, "Por favor, compile o código com sucesso antes de executar.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        ConsoleExecucao console = new ConsoleExecucao();
+        console.setVisible(true);
+
+        MaquinaVirtual vm = new MaquinaVirtual(this.instrucoesCompiladas, console);
+        new Thread(vm).start();
+        
+        atualizarStatus("Executando...");
     }
 
     private void preencherCodigoObjeto(String codigo) {

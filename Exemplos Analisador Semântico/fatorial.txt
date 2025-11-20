@@ -1,0 +1,19 @@
+begin fatoriall
+define
+    numero : num;
+	fatorial : num;
+	i : num;
+start
+    show("Digite um número para fatorar: ");
+	read(numero);
+	
+	set fatorial = 1;
+	set i = numero;
+
+	
+	loop while i >> numero
+		set fatorial = fatorial * i;
+		set i = i- 1;
+	end;
+	show(fatorial);
+end.

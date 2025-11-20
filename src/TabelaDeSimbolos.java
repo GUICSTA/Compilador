@@ -1,12 +1,8 @@
 import java.util.HashMap;
 import java.util.Map;
 
-/**
- * Gerencia a Tabela de Símbolos (TS), o escopo e os endereços de memória (VT).
- */
 public class TabelaDeSimbolos {
 
-    // O HashMap principal. A Chave (String) é o nome da variável (ex: "x").
     private Map<String, Simbolo> tabela;
     private ErrorHandler errorHandler;
 
@@ -24,7 +20,6 @@ public class TabelaDeSimbolos {
 
     public Simbolo inserir(String lexema, int categoria, int tamanho) {
 
-        // 'tamanho' já é o inteiro correto (ex: 3 para vetor, -1 para escalar)
         int tam = (tamanho > 0) ? tamanho : -1;
 
         Simbolo novoSimbolo = new Simbolo(lexema, categoria, this.VT, tam);
@@ -41,26 +36,15 @@ public class TabelaDeSimbolos {
         return novoSimbolo;
     }
 
-    /**
-     * Insere o nome do programa (categoria 0)
-     * (Método necessário para a regra 'identificador_de_programa')
-     */
+
     public void inserirPrograma(String lexema) {
         tabela.put(lexema, new Simbolo(lexema, 0, 0, -1));
     }
 
-    /**
-     * Busca um símbolo na tabela.
-     * (Método necessário para 'atribuicao', 'elemento', etc.)
-     */
     public Simbolo buscar(String lexema) {
         return tabela.get(lexema);
     }
 
-    /**
-     * Retorna o VT atual (próxima base livre)
-     * (Método necessário para #V2 e #E2)
-     */
     public int getVT() {
         return this.VT;
     }

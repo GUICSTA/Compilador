@@ -1,0 +1,16 @@
+begin 
+define
+	nome      : text = 'TESTE 2';
+	x 	  : num;
+	cont, aux : num = 1;
+start
+	show (nome).
+	show ('x = ');
+	read (x);
+	set aux = 1;
+	loop while cont <<= 10
+		set aux = aux * cont;
+		show (aux);
+		set cont = cont + 1;
+	end;
+end.

@@ -1,0 +1,10 @@
+begin 
+define
+	i	: num = 1;
+	x	: num[3] = {"A", "B", "C", "D", "E"};
+start
+	loop while i <<= 5
+		show (x[i]);
+		set i = i + 1;
+	end;
+end.

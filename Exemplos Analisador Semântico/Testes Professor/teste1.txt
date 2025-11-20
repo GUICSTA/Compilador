@@ -1,0 +1,5 @@
+BEGIN teste
+
+START
+	SHOW ("teste ", "programa ", 1).
+END.
